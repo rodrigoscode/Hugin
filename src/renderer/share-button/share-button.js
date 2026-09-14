@@ -2,13 +2,13 @@
  * Replaces or hijacks Discord's screen-share button.
  */
 
-const SHARE_LABELS = [
-    /compartilhar (a )?tela/i,
-    /compartilhamento de tela/i,
-    /share your screen/i,
-    /share screen/i,
-    /screen share/i
-];
+const SHARE_LABELS = [/^compartilhar (a |sua )?tela/i, /^compartilhamento de tela/i, /^share (your )?screen/i, /^screen share/i];
+
+/**
+ * Chat messages and their link embeds never hold the call's share button, though a link's title can start
+ * like its label ("Compartilhamento de tela P2P…").
+ */
+const CHAT_CONTENT_SELECTOR = '[id^="chat-messages-"], [id^="message-accessories-"], [class*="embedFull"]';
 
 const SHARE_ICON_SIGNATURE = "M19 2a3 3 0 0 1 3 3v6.88";
 const ACTIVE_BUTTON_CLASS = "buttonActive_e131a9";
@@ -207,6 +207,12 @@ function accessibleName(element) {
     return document.getElementById(describedBy)?.textContent ?? "";
 }
 
+function isShareButton(element) {
+    if (element.closest(CHAT_CONTENT_SELECTOR)) return false;
+    const name = accessibleName(element).trim();
+    return name.length <= 40 && SHARE_LABELS.some(rx => rx.test(name));
+}
+
 function takeShareButton(element) {
     if (element.hasAttribute("data-hugin-btn")) return;
 
@@ -221,7 +227,7 @@ function scanShareButton() {
     for (const element of document.querySelectorAll(
         "button[aria-label], button[aria-describedby], [role='button'][aria-label], [role='button'][aria-describedby]"
     )) {
-        if (!SHARE_LABELS.some(rx => rx.test(accessibleName(element)))) continue;
+        if (!isShareButton(element)) continue;
         takeShareButton(element);
         found = true;
     }
@@ -230,6 +236,6 @@ function scanShareButton() {
 
     for (const icon of document.querySelectorAll(`path[d^="${SHARE_ICON_SIGNATURE}"]`)) {
         const element = icon.closest("button, [role='button']");
-        if (element) takeShareButton(element);
+        if (element && !element.closest(CHAT_CONTENT_SELECTOR)) takeShareButton(element);
     }
 }
