@@ -1,0 +1,16 @@
+# Build output: Hugin.exe and the bundled payload (build.ps1 regenerates both)
+dist/
+
+# go build without -o drops the binary in the root
+/*.exe
+
+# goversioninfo writes these too; only resource_windows_amd64.syso is used
+resource_windows_386.syso
+resource_windows_arm.syso
+resource_windows_arm64.syso
+
+# Editors and Windows
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
