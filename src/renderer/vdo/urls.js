@@ -44,10 +44,16 @@ function pushUrl(room, streamId, label, quality, mode, deviceLabel) {
 
 /**
  * CSS injected into the stage's VDO.Ninja page (base64css) so the video fills the frame with no border
- * or background.
+ * or background. VDO.Ninja sizes each video's container in pixels from a throttled resize handler, so
+ * when the frame moves between the PiP and the stage the video would keep its old size for a moment;
+ * filling the frame in CSS makes it follow at once, and its layout transitions are switched off.
  */
 function vdoStageCss() {
     const css =
+        "*,*::before,*::after{transition:none!important;animation:none!important}" +
+        "#gridlayout>div{left:0!important;top:0!important;width:100%!important;height:100%!important}" +
+        "#gridlayout .holder{width:100%!important;height:100%!important}" +
+        "#gridlayout video{left:0!important;top:0!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important}" +
         ".holder{border-width:0!important;border-color:transparent!important;margin:0!important;outline:0!important;box-shadow:none!important}" +
         "#gridlayout,#gridlayout>div{border:0!important;outline:0!important;box-shadow:none!important}" +
         "video{border:0!important;outline:0!important;box-shadow:none!important}";

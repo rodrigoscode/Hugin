@@ -2,8 +2,15 @@
  * Opening, mounting and closing the stage inside Discord's call screen.
  */
 
-function closeWatchScreen() {
-    if (!watchScreen) return;
+/**
+ * With keepFrame the stream's iframe is parked for the PiP or a new stage; otherwise it is dropped.
+ */
+function closeWatchScreen(options = {}) {
+    if (!watchScreen) {
+        if (!options.keepFrame) dropStreamFrame();
+        return;
+    }
+
     document.removeEventListener("keydown", onWatchScreenKey, true);
     document.getElementById(WATCH_STYLE_ID)?.remove();
 
@@ -23,9 +30,15 @@ function closeWatchScreen() {
     stageTooltips = null;
     clearInterval(watchScreen.exitWatcher);
     watchScreen.hostElement?.removeAttribute("data-hugin-host");
-    const iframeVideo = watchScreen.node.querySelector("[data-hugin-video]");
+    const iframeVideo = watchScreen.frame;
     if (iframeVideo?.huginListener) removeEventListener("message", iframeVideo.huginListener);
     clearInterval(iframeVideo?.huginWatchdog);
+
+    if (iframeVideo && streamFrame?.frame === iframeVideo) {
+        if (options.keepFrame) parkStreamFrame();
+        else dropStreamFrame();
+    }
+
     watchScreen.node.remove();
     for (const hidden of watchScreen.hidden) hidden.el.style.display = hidden.display;
     watchScreen = null;
@@ -122,7 +135,8 @@ function callLink() {
 }
 
 /**
- * Opens the stage for a stream on the call screen, navigating there first when needed.
+ * Opens the stage for a stream on the call screen, navigating there first when needed. The call screen
+ * is looked for on every frame, so the stage mounts before Discord's own call view is painted.
  */
 function openWatchScreen(item) {
     if (state.simulateViewer && item?.mine)
@@ -157,26 +171,35 @@ function openWatchScreen(item) {
             return;
         }
 
-        setTimeout(wait, 60);
+        requestAnimationFrame(wait);
     };
 
-    setTimeout(wait, 60);
+    requestAnimationFrame(wait);
 }
 
 /**
  * Builds the stage from Discord's captured markup inside the call screen.
  */
 function mountWatchScreen(item) {
+    pendingOpen++;
     const page = chatPage();
 
     if (!page) {
+        dropStreamFrame();
         log("chat area not found; stage not mounted");
         return;
     }
 
-    closeWatchScreen();
+    closeWatchScreen({
+        keepFrame: true
+    });
+
     closeLivePreview();
-    closePip();
+
+    closePip({
+        keepFrame: true
+    });
+
     ensureWatchStyle();
     const shell = document.createElement("div");
     shell.innerHTML = CAPTURED_WATCH_HTML;
@@ -330,6 +353,7 @@ function mountWatchScreen(item) {
     const initialAspect = knownAspect(item);
     if (initialAspect) node.dataset.huginAspect = String(initialAspect);
     const video = mountWatchVideo(node, item);
+    if (!video) dropStreamFrame();
     const volume = mountWatchVolume(node, item);
     fitWatchStage(node);
     const disableFullscreen = bindFullscreen(node);
@@ -355,14 +379,28 @@ function mountWatchScreen(item) {
         disableFullscreen: disableFullscreen,
         disableZoom: disableZoom,
         placeholder: null,
-        placeholderKind: null
+        placeholderKind: null,
+        frame: video?.frame ?? null,
+        frameSlot: video?.slot ?? null,
+        parkedAt: 0
     };
 
     watchScreen.exitWatcher = setInterval(() => {
-        if (watchScreen && !watchScreen.node.isConnected) leftStage();
+        if (!watchScreen) return;
+
+        if (!watchScreen.node.isConnected) {
+            leftStage();
+            return;
+        }
+
+        if (watchScreen.parkedAt && Date.now() - watchScreen.parkedAt > PARKED_STAGE_FRAME_MS) {
+            watchScreen.parkedAt = 0;
+            const slot = watchScreen.frameSlot;
+            if (!placeStreamFrame(slot?.parent, slot?.ref, STAGE_FRAME_STYLE)) mountWatchScreen(watchScreen.item);
+        }
     }, 250);
 
-    if (video) showStagePlaceholder("loading");
+    if (video && !video.playing) showStagePlaceholder("loading");
     const IDLE_MS = 2000;
 
     const IDLE_CLASSES = [

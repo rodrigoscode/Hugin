@@ -34,8 +34,10 @@ share-button/stream-menu.js
 live/badges.js
 live/lobby.js
 live/ask-to-stream.js
+live/call-tiles.js
 live/preview.js
 ui/discord-popout.js
+stage/stream-frame.js
 stage/pip-spring.js
 stage/pip-drag.js
 stage/pip.js

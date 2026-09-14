@@ -119,7 +119,7 @@ function syncIframeBitrates() {
     const list = streamers();
 
     const targets = [
-        [watchScreen?.item, watchScreen?.node?.querySelector("[data-hugin-video]")],
+        [watchScreen?.item, watchScreen?.frame],
         [pip?.item, pip?.frame]
     ];
 
@@ -144,7 +144,7 @@ function syncIframeBitrates() {
  * node above it.
  */
 function sendVolumeToStage(frame) {
-    const target = frame ?? watchScreen?.node.querySelector("[data-hugin-video]");
+    const target = frame ?? watchScreen?.frame;
     if (!target?.contentWindow) return;
     const level = state.muted ? 0 : Math.max(0, Math.min(2, state.volume ?? 1));
 
@@ -183,7 +183,10 @@ function mountWatchVolume(node, item) {
 
     const draw = () => {
         const v = state.muted ? 0 : Math.max(0, Math.min(1, state.volume ?? 1));
-        if (bar) bar.style.width = `${Math.round(v * 100)}%`;
+        if (bar) {
+            bar.style.width = `${Math.round(v * 100)}%`;
+            bar.classList.toggle("fakeEdges_b26b79", v > 0);
+        }
         if (!icon) return;
         const shape = v === 0 ? "muted" : v <= 0.5 ? "half" : "full";
         if (shape === currentShape) return;
@@ -335,35 +338,37 @@ function vdoVideoStarted(data, streamId) {
 function mountWatchVideo(node, item) {
     const sizer = node.querySelector('[class*="videoSizer_a21736"]');
     if (!sizer) return null;
-    const streamId = item.mine || item.simulated ? state.pushId : item.key;
+    const zoomBox = sizer.querySelector('[class*="videoContainer__1505a"]');
+    const overlay = sizer.querySelector('[class*="overlayContainer__2f4f7"]');
+    let slot;
 
-    if (!streamId) {
+    if (zoomBox) {
+        slot = {
+            parent: zoomBox,
+            ref: null
+        };
+    } else if (overlay && overlay.parentElement) {
+        slot = {
+            parent: overlay.parentElement,
+            ref: overlay
+        };
+    } else {
+        sizer.style.position ||= "relative";
+        slot = {
+            parent: sizer,
+            ref: null
+        };
+    }
+
+    const taken = takeStreamFrame(slot.parent, slot.ref, item, STAGE_FRAME_STYLE);
+
+    if (!taken) {
         log("no stream id for the iframe:", item.key);
         return null;
     }
 
-    const frame = document.createElement("iframe");
-    frame.setAttribute("data-hugin-video", "");
-    frame.allow = "autoplay; fullscreen";
-
-    frame.style.cssText =
-        "position:absolute;left:-3px;top:-3px;width:calc(100% + 6px);height:calc(100% + 6px);border:0;background:#000;pointer-events:none;";
-
-    frame.src = soloUrl(streamId, Boolean(item.mine), itemQuality(item));
-    frame.dataset.bitrate = String(requestedBitrate(itemQuality(item)));
-    frame.dataset.huginStream = streamId;
-    const zoomBox = sizer.querySelector('[class*="videoContainer__1505a"]');
-    const overlay = sizer.querySelector('[class*="overlayContainer__2f4f7"]');
-
-    if (zoomBox) {
-        zoomBox.appendChild(frame);
-    } else if (overlay && overlay.parentElement) {
-        overlay.parentElement.insertBefore(frame, overlay);
-    } else {
-        sizer.style.position ||= "relative";
-        sizer.appendChild(frame);
-    }
-
+    const { frame } = taken;
+    const streamId = frame.dataset.huginStream;
     const tileVideo = frame.closest('[class*="tile__2f4f7"]');
 
     if (tileVideo) {
@@ -437,8 +442,21 @@ function mountWatchVideo(node, item) {
     addEventListener("message", onMessage);
     frame.huginListener = onMessage;
     frame.huginWatchdog = setInterval(() => reloadStuckStage(frame, streamId), 2000);
-    log("iframe video:", item.mine ? "own" : item.label, "| id:", String(streamId).slice(0, 12));
-    return frame;
+    if (taken.playing && !item.mine) sendVolumeToStage(frame);
+
+    log(
+        "iframe video:",
+        item.mine ? "own" : item.label,
+        "| id:",
+        String(streamId).slice(0, 12),
+        taken.playing ? "| kept playing" : ""
+    );
+
+    return {
+        frame,
+        playing: taken.playing,
+        slot
+    };
 }
 
 /**
@@ -482,8 +500,7 @@ function syncWatchPresence() {
 
     if (streamers().some(item => item.key === watchScreen.item.key)) {
         if (watchScreen.placeholderKind === "ended") {
-            const iframeVideo = watchScreen.node.querySelector("[data-hugin-video]");
-            if (iframeVideo) reloadStageFrame(iframeVideo);
+            if (watchScreen.frame) reloadStageFrame(watchScreen.frame);
             showStagePlaceholder("loading");
         }
         return;

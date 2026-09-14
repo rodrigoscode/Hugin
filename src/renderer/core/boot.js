@@ -51,6 +51,8 @@ function boot() {
     watchLobby();
     watchLabels();
     watchVoiceChannel();
+    watchStreamFrames();
+    watchCallTiles();
     addEventListener("resize", syncViewBounds);
 
     if (native.debug) {

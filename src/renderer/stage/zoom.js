@@ -51,7 +51,7 @@ function bindStageZoom(node, item) {
         },
         timers: {},
         isOpen: false,
-        minimapIframe: null
+        dismissed: false
     };
 
     bindZoomButtons(zoom);
@@ -59,14 +59,27 @@ function bindStageZoom(node, item) {
     bindZoomMinimap(zoom);
     bindZoomPan(zoom);
     const observer = observeZoomResize(zoom);
+    const dismiss = event => dismissZoomPanel(zoom, event);
+    document.addEventListener("mousedown", dismiss, true);
     drawZoom(zoom);
 
     return () => {
         for (const time of Object.values(zoom.timers)) clearTimeout(time);
         observer?.disconnect();
-        zoom.minimapIframe?.remove();
-        zoom.minimapIframe = null;
+        document.removeEventListener("mousedown", dismiss, true);
+        zoom.minimap.block.remove();
     };
+}
+
+/**
+ * A click outside the open panel closes it and keeps the zoom; changing the zoom level reopens it.
+ */
+function dismissZoomPanel(zoom, event) {
+    if (!zoom.isOpen || (event.composedPath?.() ?? []).includes(zoom.controls)) return;
+    zoom.dismissed = true;
+    zoom.flags.changing = false;
+    clearTimeout(zoom.timers.changing);
+    drawZoom(zoom);
 }
 
 /**
@@ -99,8 +112,14 @@ function clampZoomOffset(zoom, point, z = zoom.level) {
  * Changes the zoom level keeping focusPoint (relative to the stage center) still on screen.
  */
 function applyZoomLevel(zoom, target, focusPoint) {
+    zoom.dismissed = false;
     const next = clampNumber(target, STAGE_ZOOM.min, STAGE_ZOOM.max);
-    if (focusPoint == null || next === zoom.level) return;
+
+    if (focusPoint == null || next === zoom.level) {
+        drawZoom(zoom);
+        return;
+    }
+
     pulseZoomFlag(zoom, "changing", 2000);
     const ratio = next / zoom.level;
 
@@ -134,6 +153,10 @@ function stopZoomEvent(event) {
     event.stopPropagation();
 }
 
+/**
+ * Opens the zoom panel. Like Discord's, the minimap holds no picture: only the frame and the rectangle of
+ * the part in view.
+ */
 function showZoomPanel(zoom) {
     if (zoom.isOpen) return;
     zoom.isOpen = true;
@@ -141,27 +164,12 @@ function showZoomPanel(zoom) {
     zoom.controls.insertBefore(zoom.minimap.block, zoom.controls.firstChild);
     zoom.optionRow.insertBefore(zoom.slider.root, zoom.zoomInButton);
     zoom.optionRow.insertBefore(zoom.zoomOutButton, zoom.slider.root);
-    if (!zoom.streamId) return;
-
-    const iframe = document.createElement("iframe");
-    iframe.allow = "autoplay";
-    iframe.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none;background:#000;";
-
-    iframe.src = soloUrl(zoom.streamId, true, itemQuality(zoom.item), {
-        scale: 15,
-        videobitrate: 400
-    });
-
-    zoom.minimapIframe = iframe;
-    zoom.minimap.video.appendChild(iframe);
 }
 
 function closeZoomPanel(zoom) {
     if (!zoom.isOpen) return;
     zoom.isOpen = false;
     zoom.controls.classList.remove("controlsWithChildren__07fe9");
-    zoom.minimapIframe?.remove();
-    zoom.minimapIframe = null;
     zoom.minimap.block.remove();
     zoom.slider.root.remove();
     zoom.zoomOutButton.remove();
@@ -186,7 +194,7 @@ function drawZoom(zoom) {
     wrapper.classList.toggle("zoomEnabled__1505a", zoomed);
     wrapper.classList.toggle("zoomDragging__1505a", zoom.dragging);
 
-    if (flags.changing || zoomed) showZoomPanel(zoom);
+    if (flags.changing || (zoomed && !zoom.dismissed)) showZoomPanel(zoom);
     else closeZoomPanel(zoom);
 
     if (zoom.isOpen) drawZoomPanel(zoom);

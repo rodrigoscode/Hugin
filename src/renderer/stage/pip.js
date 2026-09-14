@@ -23,9 +23,17 @@ function onMyCallScreen() {
  * Discord's.
  */
 function openPip(item) {
-    closePip();
+    closePip({
+        keepFrame: true
+    });
+
     const parts = buildPipShell(item);
-    if (!parts) return;
+
+    if (!parts) {
+        dropStreamFrame();
+        return;
+    }
+
     const { host, shell, pipWindow, surface } = parts;
     bindPipButtons(shell, item);
     const video = attachPipVideo(surface, item);
@@ -136,23 +144,17 @@ function bindPipButtons(shell, item) {
  * arrives.
  */
 function attachPipVideo(surface, item) {
-    const streamId = item.mine || item.simulated ? state.pushId : item.key;
+    const taken = takeStreamFrame(surface, surface.firstChild, item, PIP_FRAME_STYLE);
 
-    if (!streamId) {
+    if (!taken) {
         return {
             frame: null,
             listener: null
         };
     }
 
-    const frame = document.createElement("iframe");
-    frame.setAttribute("data-hugin-video", "");
-    frame.allow = "autoplay; fullscreen";
-    frame.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none;background:#000;";
-    frame.src = soloUrl(streamId, Boolean(item.mine), itemQuality(item));
-    frame.dataset.bitrate = String(requestedBitrate(itemQuality(item)));
-    frame.dataset.huginStream = streamId;
-    surface.insertBefore(frame, surface.firstChild);
+    const { frame } = taken;
+    const streamId = frame.dataset.huginStream;
     const spinnerTemplate = document.createElement("template");
     spinnerTemplate.innerHTML = CAPTURED_SPINNER_HTML;
     const spinner = spinnerTemplate.content.firstElementChild;
@@ -164,7 +166,8 @@ function attachPipVideo(surface, item) {
         else if (!visible) spinner.remove();
     };
 
-    showSpinner(true);
+    showSpinner(!taken.playing);
+    if (taken.playing && !item.mine) sendVolumeToStage(frame);
 
     const listener = event => {
         if (event.source !== frame.contentWindow) return;
@@ -235,31 +238,45 @@ function watchPipStream(item) {
         }
 
         if (onMyCallScreen()) {
-            closePip();
+            closePip({
+                keepFrame: true
+            });
+
             mountWatchScreen(item);
         }
     }, 300);
 }
 
-function closePip() {
-    if (!pip) return;
+/**
+ * With keepFrame the stream's iframe is parked for the stage; otherwise it is dropped.
+ */
+function closePip(options = {}) {
+    if (!pip) {
+        if (!options.keepFrame) dropStreamFrame();
+        return;
+    }
+
     clearInterval(pip.watcher);
     pip.stopIdle();
     pip.unmountPosition();
     if (streamMenu && pip.host.shadowRoot?.contains(streamMenu.anchor)) closeStreamMenu();
     if (pip.listener) removeEventListener("message", pip.listener);
+
+    if (pip.frame && streamFrame?.frame === pip.frame) {
+        if (options.keepFrame) parkStreamFrame();
+        else dropStreamFrame();
+    }
+
     pip.host.remove();
     pip = null;
 }
 
 /**
- * From the PiP back to the stage, navigating to the call when needed.
+ * From the PiP back to the stage, navigating to the call when needed. The PiP stays up until the stage
+ * mounts and takes its frame over.
  */
 function returnFromPip() {
-    if (!pip) return;
-    const item = pip.item;
-    closePip();
-    openWatchScreen(item);
+    if (pip) openWatchScreen(pip.item);
 }
 
 /**
@@ -269,9 +286,17 @@ function returnFromPip() {
 function leftStage() {
     if (!watchScreen) return;
     const { item, placeholderKind } = watchScreen;
-    closeWatchScreen();
-    if (placeholderKind === "ended") return;
-    if (leftViaGateway || !state.channelId) return;
-    if (!streamers().some(entry => entry.key === item.key)) return;
-    openPip(item);
+
+    closeWatchScreen({
+        keepFrame: true
+    });
+
+    const staysOpen =
+        placeholderKind !== "ended" &&
+        !leftViaGateway &&
+        Boolean(state.channelId) &&
+        streamers().some(entry => entry.key === item.key);
+
+    if (staysOpen) openPip(item);
+    else dropStreamFrame();
 }

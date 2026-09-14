@@ -174,13 +174,6 @@ async function beginBroadcast(choice) {
     syncBeacon().catch(err => log("syncBeacon:", err));
     syncAnnounce().catch(err => log("syncAnnounce:", err));
     syncWatchPresence();
-    const onCallScreen = Boolean(chatPage()?.querySelector('[class*="callContainer_cb9592"]'));
-
-    if (!watchScreen && onCallScreen) {
-        const own = streamers().find(entry => entry.mine);
-        if (own) openWatchScreen(own);
-    }
-
     render();
 
     log(

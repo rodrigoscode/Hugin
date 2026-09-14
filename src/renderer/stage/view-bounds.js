@@ -36,7 +36,7 @@ function syncViewBounds() {
               height: 360
           };
 
-    const viaIframe = Boolean(watchScreen?.node.querySelector("[data-hugin-video]"));
+    const viaIframe = Boolean(watchScreen?.frame);
 
     for (const candidate of ["watch", "broadcast"]) {
         const active = !viaIframe && Boolean(role) && candidate === role;

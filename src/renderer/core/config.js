@@ -2,7 +2,7 @@
  * Build constants, runtime configuration (defaults merged with config.json) and logging.
  */
 
-const VERSION = "1.0.2";
+const VERSION = "1.0.3";
 const CHUNK_KEY = "webpackChunkdiscord_app";
 
 /**
