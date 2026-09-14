@@ -10,6 +10,10 @@
 
 Transmita sua tela ao vivo para os amigos que estão no mesmo servidor do Discord, em alta qualidade, com o vídeo indo direto do seu PC para o deles.
 
+<p align="center">
+  <img src="assets/demo.gif" width="880" alt="O botão de compartilhar tela abre o seletor do Hugin, a transmissão começa, o selo Ao Vivo aparece com a prévia e o palco mostra a tela.">
+</p>
+
 ## O que ele faz
 
 - **Compartilhamento de tela dentro do Discord.** O botão de compartilhar tela da call passa a abrir o Hugin, com a mesma aparência do Discord: escolha um aplicativo ou a tela inteira e pronto.
