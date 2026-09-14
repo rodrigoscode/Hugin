@@ -34,9 +34,6 @@ function pipCornerPosition(element, corner) {
     };
 }
 
-/**
- * Keeps the window inside the app.
- */
 function constrainPipWindow(pipWindow, x, y) {
     const width = pipWindow.clientWidth;
     const height = pipWindow.clientHeight;

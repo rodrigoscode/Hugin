@@ -39,9 +39,6 @@ async function loadSounds() {
     log("sounds loaded:", Object.keys(loadedSounds).join(",") || "(none)");
 }
 
-/**
- * Plays an event sound and logs why it played.
- */
 function playSound(eventName, reason) {
     log("sound:", eventName, reason ? "(" + reason + ")" : "");
     if (!config.playSounds) return;

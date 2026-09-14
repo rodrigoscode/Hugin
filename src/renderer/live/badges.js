@@ -152,9 +152,6 @@ function watchLiveBadges() {
     }, 1500);
 }
 
-/**
- * The live stream item for a Discord user id.
- */
 function streamerForUser(userId) {
     const list = streamers();
 

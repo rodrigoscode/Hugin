@@ -1,6 +1,5 @@
 // Package discordinstall finds installed Discord clients and controls the
-// running process (start/stop). It never patches anything; see internal/patch
-// for that.
+// running process (start/stop). Patching lives in internal/injector.
 package discordinstall
 
 import (

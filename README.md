@@ -10,7 +10,7 @@ Transmita sua tela ao vivo para os amigos que estão no mesmo servidor do Discor
 
 - **Compartilhamento de tela dentro do Discord.** O botão de compartilhar tela da call passa a abrir o Hugin, com a mesma aparência do Discord: escolha um aplicativo ou a tela inteira e pronto.
 - **Direto entre os PCs.** O vídeo vai de um computador para o outro (P2P, via [VDO.Ninja](https://vdo.ninja)), sem passar pelos servidores do Discord.
-- **Qualidade de verdade.** 720p, 1080p, 1440p ou a resolução original da tela, a 15, 30 ou 60 fps. Dá para trocar a qualidade no meio da transmissão sem derrubar ninguém.
+- **Qualidade de verdade.** 480p, 720p, 1080p, 1440p ou a resolução original da tela, a 15, 30 ou 60 fps. Dá para trocar a qualidade no meio da transmissão sem derrubar ninguém.
 - **Áudio sem eco.** Transmitindo uma janela, só o som daquele aplicativo vai junto. Transmitindo a tela inteira, vai todo o som do PC menos o do Discord: as vozes da call, os sons de entrar, sair e mutar e as transmissões que você está assistindo ficam de fora. Dá para ligar e desligar o áudio no ar.
 - **Ao Vivo no servidor todo.** O selo "Ao Vivo" aparece em quem está transmitindo em qualquer call do servidor. Passe o mouse para ver a prévia e clique para entrar na call e assistir.
 - **Assistir como no Discord.** Prévia junto dos cards de atividade, palco com tela cheia, zoom com minimapa, janela flutuante (PiP) quando você sai da tela da call e volume até 200%.

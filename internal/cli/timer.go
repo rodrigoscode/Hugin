@@ -49,7 +49,7 @@ func RunTimerResolution(args []string) int {
 }
 
 // installHelper keeps the data directory's copy of this executable current.
-// A failure only costs 60 fps capture with Discord covered, never the install.
+// A failure costs what the helper does during a broadcast, never the install.
 func installHelper() {
 	if err := injector.InstallHelper(paths.DataDirectory()); err != nil {
 		cliui.Warn("could not copy the capture helper: " + err.Error())

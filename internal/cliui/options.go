@@ -33,10 +33,9 @@ func (o Options) Get(key string) (string, bool) {
 	return v, ok
 }
 
-// ParseArguments mirrors parseArguments from the TypeScript CLI: any
-// argument not starting with "--" selects the command; "--flag" sets a
-// boolean; "--key=value" sets a value. An unknown command, or --help,
-// forces the help screen.
+// ParseArguments reads the command line: any argument not starting with "--"
+// selects the command; "--flag" sets a boolean; "--key=value" sets a value. An
+// unknown command, or --help, forces the help screen.
 func ParseArguments(argv []string) Options {
 	opts := Options{
 		Command: CommandInstall,

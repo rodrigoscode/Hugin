@@ -19,12 +19,20 @@ const PEEK_LINGER_MS = 15000;
  */
 const PREVIEW_FRAME_TTL_MS = 60000;
 
+/**
+ * Discord opens its activities card a moment after a row is hovered (measured 170-205 ms). Our own
+ * popout waits this long for it, so a stream that belongs in the card never flashes alone first.
+ */
+const ACTIVITIES_CARD_WAIT_MS = 300;
+
 const previewFrames = new Map();
 
 function closeLivePreview() {
     clearTimeout(livePreviewTimer);
     clearInterval(livePreviewFrames);
     clearInterval(livePreviewMerge);
+    livePreview?.layerObserver?.disconnect();
+    restoreAskToStream();
     livePreviewFrames = null;
     livePreviewMerge = null;
     for (const stray of document.querySelectorAll("[data-hugin-preview]")) stray.remove();
@@ -298,7 +306,11 @@ function openLivePreview(item, rowEl) {
         wrapper,
         section,
         row: rowEl,
-        merged: null
+        merged: null,
+        wasMerged: false,
+        openedAt: Date.now(),
+        layerObserver: null,
+        knownPopouts: new Set(document.querySelectorAll(PROFILE_POPOUT_SELECTOR))
     };
 
     const watchThis = () => {
@@ -439,6 +451,7 @@ function openLivePreview(item, rowEl) {
     wrapper.style.top = `${Math.round(Math.min(Math.max(8, anchor.top - 8), innerHeight - height - 8))}px`;
     mergeIntoActivitiesCard();
     livePreviewMerge = setInterval(mergeIntoActivitiesCard, 150);
+    livePreview.layerObserver = observePopoutLayers(mergeIntoActivitiesCard);
 }
 
 /**
@@ -498,9 +511,47 @@ function keepCardInView(card) {
 }
 
 /**
+ * Runs fn whenever Discord's popout layers change, so the stream section moves into the activities
+ * card before the card is first painted.
+ */
+function observePopoutLayers(fn) {
+    const observer = new MutationObserver(() => fn());
+    const containers = document.querySelectorAll('[class*="layerContainer_"]');
+
+    for (const container of containers.length ? containers : [document.body]) {
+        observer.observe(container, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    return observer;
+}
+
+/**
+ * Discord's profile popout, which opens when a user's row is clicked.
+ */
+const PROFILE_POPOUT_SELECTOR = ".user-profile-popout";
+
+/**
+ * Whether a profile popout opened after the preview did. Discord closes its hover card when that
+ * happens, so the preview hides too.
+ */
+function profilePopoutOpened(preview) {
+    return [...document.querySelectorAll(PROFILE_POPOUT_SELECTOR)].some(
+        popout =>
+            !preview.knownPopouts.has(popout) &&
+            !popout.contains(preview.section) &&
+            !popout.querySelector('[class*="container_d7bc5d"]')
+    );
+}
+
+/**
  * Discord shows a live user's stream as the first section of its voice activities card. When that card
- * opens for the hovered row, our stream section moves into it and our own popout hides; if the card
- * goes away while the row is still hovered, the section returns to our popout.
+ * opens for the hovered row, our stream section moves into it and our own popout hides. Once merged,
+ * the preview never falls back to our popout: while the card is gone (a profile popout replaced it) the
+ * preview stays hidden, until the card comes back or the row is left. Our own popout also hides while a
+ * profile popout opened over it.
  */
 function mergeIntoActivitiesCard() {
     const preview = livePreview;
@@ -514,21 +565,26 @@ function mergeIntoActivitiesCard() {
             bindCardHover(card);
             keepCardInView(card);
         }
+        if (native.debug && !preview.wasMerged) log("activities card after", Date.now() - preview.openedAt, "ms");
+        hideAskToStream(card);
         preview.merged = card;
+        preview.wasMerged = true;
         preview.host.style.display = "none";
         return;
     }
 
-    if (!preview.merged) return;
+    if (preview.merged) {
+        if (!preview.row.matches(":hover")) {
+            closeLivePreview();
+            return;
+        }
 
-    if (!preview.row.matches(":hover")) {
-        closeLivePreview();
-        return;
+        preview.merged = null;
+        preview.wrapper.insertBefore(preview.section, preview.wrapper.firstChild);
     }
 
-    preview.merged = null;
-    preview.wrapper.insertBefore(preview.section, preview.wrapper.firstChild);
-    preview.host.style.display = "";
+    const waitingForCard = Date.now() - preview.openedAt < ACTIVITIES_CARD_WAIT_MS;
+    preview.host.style.display = preview.wasMerged || waitingForCard || profilePopoutOpened(preview) ? "none" : "";
 }
 
 const HOVER_MARK = "__huginPreviewHover";

@@ -92,10 +92,8 @@ func recordFailure(text string) {
 // LastFailure is the text of the most recent Fail call, or "" if none.
 func LastFailure() string { return lastFailure }
 
-// ShowMessageBox raises a native Win32 message box via user32.dll, with no
-// external process spawned -- unlike the previous PowerShell-based
-// approach, this has no dependency on PowerShell being reachable, which
-// this same session watched get blocked by Smart App Control.
+// ShowMessageBox raises a native Win32 message box through user32.dll, without
+// spawning another process.
 func ShowMessageBox(title, message string) {
 	if consoleAttached() {
 		return

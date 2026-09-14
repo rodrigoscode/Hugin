@@ -44,10 +44,7 @@ type Config struct {
 	FetchOwnProfile bool `json:"fetchOwnProfile"`
 	FetchProfiles   bool `json:"fetchProfiles"`
 
-	PlaySounds bool    `json:"playSounds"`
-	SoundStart string  `json:"soundStart"`
-	SoundStop  string  `json:"soundStop"`
-	UIScale    float64 `json:"uiScale"`
+	PlaySounds bool `json:"playSounds"`
 
 	// ConfigVersion marks which default migrations a config.json has been
 	// through; see Read.
@@ -76,14 +73,12 @@ func Default() Config {
 		FetchOwnProfile:    true,
 		FetchProfiles:      true,
 		PlaySounds:         true,
-		UIScale:            1.1,
 		ConfigVersion:      currentConfigVersion,
 	}
 }
 
 // Read loads config.json, merging it on top of Default() so a config file
-// missing newer keys still yields sane values -- the same semantics as
-// {...DEFAULT_CONFIG, ...partial} in the TypeScript version.
+// missing newer keys still yields sane values.
 func Read() Config {
 	cfg := Default()
 

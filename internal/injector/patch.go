@@ -27,9 +27,9 @@ type InstallResult struct {
 	Reinstalled   bool
 }
 
-// ApplyPatch installs payload into install, following the same state
-// machine as the original tool: only a "clean" install is ever renamed, and
-// a "foreign" one (another mod's folder) is refused unless Force is set.
+// ApplyPatch installs payload into install: only a "clean" install is ever
+// renamed, and a "foreign" one (another mod's folder) is refused unless Force
+// is set.
 func ApplyPatch(install discordinstall.Install, payload Payload, opts InstallOptions) (InstallResult, error) {
 	status := Inspect(install)
 

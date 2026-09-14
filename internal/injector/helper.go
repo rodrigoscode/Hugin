@@ -10,7 +10,8 @@ import (
 
 // InstallHelper copies the running executable into dataDir. The patched
 // Discord main process can't call the Windows API from JavaScript, so it runs
-// that copy (`timer-resolution`) while a screen is being shared.
+// that copy to find and watch shared windows, keep capture timers precise and
+// capture system audio without Discord.
 //
 // Nothing is written when the copy is already identical, or when this is the
 // copy itself running.

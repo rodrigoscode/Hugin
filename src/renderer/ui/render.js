@@ -3,7 +3,7 @@
  */
 
 /**
- * Brings what depends on the state up to date: today, the stage's native views.
+ * Brings the stage's native views up to date with the state.
  */
 function render() {
     if (stageView) syncViewBounds();

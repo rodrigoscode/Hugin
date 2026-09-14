@@ -2,7 +2,7 @@
  * Build constants, runtime configuration (defaults merged with config.json) and logging.
  */
 
-const VERSION = "1.0.0";
+const VERSION = "1.0.1";
 const CHUNK_KEY = "webpackChunkdiscord_app";
 
 /**
@@ -29,10 +29,7 @@ const DEFAULTS = {
     observeNetwork: true,
     fetchOwnProfile: true,
     fetchProfiles: true,
-    playSounds: true,
-    soundStart: "",
-    soundStop: "",
-    uiScale: 1.1
+    playSounds: true
 };
 
 let config = {

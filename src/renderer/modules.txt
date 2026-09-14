@@ -33,6 +33,7 @@ share-button/share-button.js
 share-button/stream-menu.js
 live/badges.js
 live/lobby.js
+live/ask-to-stream.js
 live/preview.js
 ui/discord-popout.js
 stage/pip-spring.js
