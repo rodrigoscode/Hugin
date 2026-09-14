@@ -1,4 +1,8 @@
-# Hugin
+<p align="center">
+  <img src="assets/icon.png" width="128" alt="Hugin: um corvo em pixel art pousado num galho">
+</p>
+
+<h1 align="center">Hugin</h1>
 
 > *Antes que o sol toque Midgard, Odin solta seus dois corvos ao vento: **Hugin**, o Pensamento, e **Munin**, a Memória. Eles cruzam os nove reinos, rasgam tempestades e sobrevoam campos de batalha onde nenhum mortal ousa pisar. Quando a noite cai, retornam ao ombro do Pai de Todos e sussurram tudo o que seus olhos viram.*
 >

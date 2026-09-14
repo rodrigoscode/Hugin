@@ -1,6 +1,7 @@
 // Command gen-icon draws assets/icon.ico, Hugin's raven, from pixel art: a
 // 24px sprite enlarged by whole factors, a redrawn 16px sprite for the
-// smallest size, and a hand-written ICO container.
+// smallest size, and a hand-written ICO container. The 256px image is also
+// written to assets/icon.png for the README.
 //
 // Run from the repo root: go run ./tools/gen-icon
 // Preview without touching the icon: go run ./tools/gen-icon -preview <dir>
@@ -249,6 +250,9 @@ func main() {
 	}
 
 	if err := writeICO(dest, images); err != nil {
+		panic(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(dest), "icon.png"), images[256], 0o644); err != nil {
 		panic(err)
 	}
 
