@@ -5,8 +5,15 @@
 
 const seenRoutes = new Set();
 let channelFromGateway = null;
+let gatewayChangedAt = 0;
 let leftViaGateway = false;
 let onGatewayCallLeft = null;
+
+/**
+ * Called when the voice connection closes or opens, as it does on every move between calls, so the
+ * channel is checked at once instead of on the next poll.
+ */
+let onVoiceConnectionChange = null;
 
 const channelPoll = {
     active: false,
@@ -334,6 +341,7 @@ function installNetworkObserver() {
             const value = channel ? (guild ?? "@me") + ":" + channel : null;
             if (value === channelFromGateway) return;
             channelFromGateway = value;
+            gatewayChangedAt = Date.now();
             log("voice channel via gateway:", value ?? "(left)");
             leftViaGateway = value === null;
 
@@ -362,6 +370,7 @@ function installNetworkObserver() {
             log("voice connection opened | server:", server ?? "?", "| user:", user ?? "?");
             voiceSince = Date.now();
             inCall.clear();
+            onVoiceConnectionChange?.();
 
             if (user && !state.userId) {
                 state.userId = String(user);
@@ -446,6 +455,7 @@ function installNetworkObserver() {
                     if (isVoice) {
                         socket.addEventListener("close", () => {
                             log("voice connection closed");
+                            onVoiceConnectionChange?.();
                         });
                     }
                 } catch {}

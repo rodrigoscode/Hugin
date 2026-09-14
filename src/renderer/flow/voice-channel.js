@@ -46,6 +46,10 @@ function watchVoiceChannel() {
             pollNow();
         };
 
+        onVoiceConnectionChange = () => {
+            pollNow();
+            setTimeout(pollNow, 500);
+        };
         pollNow();
         setInterval(pollNow, 2000);
     })().catch(err => log("watchVoiceChannel threw:", err));
@@ -68,9 +72,33 @@ function watchVoiceChannel() {
         }
     }
 
+    let panelChannel = null;
+    let panelChangedAt = 0;
+
+    /**
+     * The voice channel from two signals: the gateway's voice state, instant but it can miss a move, and
+     * the voice panel, which follows every move a moment later. The one that changed last wins; the panel
+     * alone never reports leaving, since it can be missing from the page.
+     */
+    function currentVoiceChannel(info) {
+        const fromPanel = info?.id ?? null;
+
+        if (fromPanel !== panelChannel) {
+            panelChannel = fromPanel;
+            panelChangedAt = Date.now();
+        }
+
+        if (fromPanel && fromPanel !== channelFromGateway && panelChangedAt > gatewayChangedAt) {
+            if (fromPanel !== state.channelId) log("voice channel via the voice panel:", fromPanel);
+            return fromPanel;
+        }
+
+        return leftViaGateway ? null : (channelFromGateway ?? fromPanel ?? voiceChannelId());
+    }
+
     async function poll() {
         const info = voiceChannelInfo();
-        const channelId = leftViaGateway ? null : (channelFromGateway ?? info?.id ?? voiceChannelId());
+        const channelId = currentVoiceChannel(info);
         if (!state.userId || !state.userName) refreshIdentity();
         await refreshRoster(channelId);
 
@@ -98,10 +126,9 @@ function watchVoiceChannel() {
             state.avatarUrl ? "ok" : "not found"
         );
 
-        if (!channelId) {
-            closePip();
-            closeWatchScreen();
-        }
+        // Like Discord, leaving the call or being moved to another channel (the AFK one included) stops watching.
+        closePip();
+        closeWatchScreen();
 
         if (state.broadcasting) await stopBroadcast();
         await leaveRoom();

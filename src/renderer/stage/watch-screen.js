@@ -141,7 +141,8 @@ function syncIframeBitrates() {
 
 /**
  * Sends the stage volume (0 to 200%) to the stage iframe: VDO.Ninja's own volume up to 100%, a gain
- * node above it.
+ * node above it. The gain node plays the stream through Web Audio, which can cut the sound, so it only
+ * comes in once the volume passes 100%, and then keeps the level for that frame.
  */
 function sendVolumeToStage(frame) {
     const target = frame ?? watchScreen?.frame;
@@ -156,8 +157,9 @@ function sendVolumeToStage(frame) {
     );
 
     const streamId = target.dataset.huginStream;
+    if (level > 1) target.dataset.huginGain = "on";
 
-    if (streamId && native.setStreamGain) {
+    if (streamId && target.dataset.huginGain === "on" && native.setStreamGain) {
         native
             .setStreamGain({
                 streamId,

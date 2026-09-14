@@ -20,14 +20,20 @@ function targetBitrate(height, fps, mode) {
 
 /**
  * The VDO.Ninja publish URL. Screen capture uses screensharequality=-1 so the requested height scales
- * the native resolution instead of forcing 1280x720.
+ * the native resolution instead of forcing 1280x720. Screen video is marked as motion, so it keeps its
+ * frame rate and lowers the resolution when a moving picture outgrows the bitrate. VDO.Ninja applies these
+ * hints only to video tracks it swaps in later; the broadcast preload marks the first capture.
  */
 function pushUrl(room, streamId, label, quality, mode, deviceLabel) {
+    const sharingScreen = mode !== "camera";
+
     return `${vdoBase()}/?${query({
         room,
         push: streamId,
-        screenshare: mode !== "camera",
+        screenshare: sharingScreen,
         webcam: mode === "camera",
+        contenthint: sharingScreen ? "motion" : undefined,
+        screensharecontenthint: sharingScreen ? "motion" : undefined,
         videodevice: mode === "camera" && deviceLabel ? deviceLabel : undefined,
         autostart: true,
         nomic: true,

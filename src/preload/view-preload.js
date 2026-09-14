@@ -61,6 +61,26 @@ function readLobbyPeers() {
 if (ROLE === "announce") inMainWorld(fakeDisplayMedia).catch(() => {});
 
 /**
+ * Marks the broadcast's screen capture as motion. An unmarked screen track keeps its resolution and drops
+ * frames when a moving picture outgrows the bitrate; motion keeps the frame rate and lowers the resolution
+ * instead. VDO.Ninja's contenthint only reaches tracks it swaps in later, not the first capture.
+ */
+function markCaptureAsMotion() {
+    const original = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+
+    Object.defineProperty(navigator.mediaDevices, "getDisplayMedia", {
+        configurable: true,
+        value: async constraints => {
+            const stream = await original(constraints);
+            for (const track of stream.getVideoTracks()) track.contentHint = "motion";
+            return stream;
+        }
+    });
+}
+
+if (ROLE === "broadcast") inMainWorld(markCaptureAsMotion).catch(() => {});
+
+/**
  * Gives the broadcast Hugin.exe's system audio (without Discord's own sound) instead of Chromium's
  * loopback: PCM arrives on a MessagePort and plays through a ring buffer into a MediaStream track that
  * replaces the display-media audio.
