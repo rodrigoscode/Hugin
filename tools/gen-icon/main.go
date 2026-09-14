@@ -25,8 +25,8 @@ import (
 var sizes = []int{16, 24, 32, 48, 64, 128, 256}
 
 // palette gives the sprite letters their colors: the outline, four grays for
-// the feathers from shadow to highlight, three oranges for the beak and a
-// light gray for the feet. '.' is transparent.
+// the feathers from shadow to highlight, three oranges for the beak, a light
+// gray for the claws and three browns for the branch. '.' is transparent.
 var palette = map[byte]color.NRGBA{
 	'o': {0x0b, 0x0b, 0x0c, 0xff},
 	'd': {0x2c, 0x2c, 0x2f, 0xff},
@@ -37,12 +37,14 @@ var palette = map[byte]color.NRGBA{
 	'k': {0xe0, 0x9a, 0x1c, 0xff},
 	'j': {0xb8, 0x74, 0x16, 0xff},
 	'f': {0x8b, 0x8b, 0x93, 0xff},
+	'n': {0x9c, 0x70, 0x43, 0xff},
+	'r': {0x7a, 0x55, 0x30, 0xff},
+	'R': {0x54, 0x39, 0x1f, 0xff},
 }
 
-// sprite is the raven perched in profile: heavy beak, folded wing shaded down
-// to the tail, and the feet in the bottom row of the belly.
+// sprite is the raven in profile, perched on a branch: heavy beak, folded wing
+// shaded down to the tail, and claws gripping the bark.
 var sprite = []string{
-	"........................",
 	"........................",
 	"........................",
 	"............oooo........",
@@ -62,16 +64,16 @@ var sprite = []string{
 	"ommmoddbbbbbbbdddo......",
 	"obbodbbbbbbbbddddo......",
 	"obdoodbbbbbbbdddo.......",
-	"odo..odoodddoodo........",
-	".o....offdodffo.........",
-	"........................",
-	"........................",
+	"odo..ooffoooffoo........",
+	".ooooooffoooffooooooooo.",
+	"ornrrrnrrrrrnrrrrnrrrrro",
+	"oRRRRRRRRRRRRRRRRRRRRRRo",
+	".oooooooooooooooooooooo.",
 }
 
 // sprite16 is the same raven redrawn at 16px, where shrinking the 24px
-// sprite would blur the eye and the feet away.
+// sprite would blur the eye and the claws away.
 var sprite16 = []string{
-	"................",
 	"................",
 	"........oooo....",
 	".......ohhhho...",
@@ -84,9 +86,10 @@ var sprite16 = []string{
 	".ommmmdddbbbdo..",
 	"ommoddbbbbbdo...",
 	"obodbbbbbddo....",
-	".o.ododdodo.....",
-	"....ofddfo......",
-	"................",
+	"odo.ofoofoo.....",
+	".oooofoofooooooo",
+	"onrrrnrrrrnrrrro",
+	"oRRRRRRRRRRRRRRo",
 }
 
 // render draws the icon at side x side: sprite16 below 24px, otherwise the
