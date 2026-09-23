@@ -38,7 +38,10 @@ function ensureWatchStyle() {
         "html [data-hugin-watch-screen] .root_bfe55a.idle_bfe55a:not(:focus-within) .gradientContainer_bfe55a { opacity: 0; }" +
         "html [data-hugin-watch-screen] .root_bfe55a.idle_bfe55a:not(:focus-within) { cursor: none; }" +
         ".full-motion [data-hugin-watch-screen] .controlSection_bfe55a { transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out; }" +
-        "[data-hugin-watch-screen] .callContainer_cb9592 { border-top-width: 0 !important; border-inline-end-width: 0 !important; }";
+        "[data-hugin-watch-screen] .callContainer_cb9592 { border-top-width: 0 !important; border-inline-end-width: 0 !important; }" +
+        "[data-hugin-watch-grid] { position:absolute; inset:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; background:#000; padding:8px; box-sizing:border-box; z-index:1; }" +
+        "[data-hugin-watch-slot] { position:relative; min-width:0; min-height:0; overflow:hidden; border-radius:8px; background:#000; }" +
+        "[data-hugin-watch-slot-label] { position:absolute; left:10px; bottom:8px; right:10px; z-index:2; color:#fff; font:600 13px/18px var(--font-primary); text-shadow:0 1px 3px #000; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; pointer-events:none; }";
 
     document.head.appendChild(style);
 }
@@ -117,11 +120,14 @@ function dropBroadcastButton(node) {
  */
 function syncIframeBitrates() {
     const list = streamers();
+    const targets = [];
 
-    const targets = [
-        [watchScreen?.item, watchScreen?.frame],
-        [pip?.item, pip?.frame]
-    ];
+    for (const item of watchItemsOf(watchScreen?.item)) {
+        const frame = (watchScreen?.frames ?? []).find(entry => entry.dataset.huginStream === streamIdOf(item));
+        targets.push([item, frame ?? watchScreen?.frame]);
+    }
+
+    targets.push([pip?.item, pip?.frame]);
 
     for (const [item, frame] of targets) {
         if (!item || !frame?.contentWindow || !frame.isConnected) continue;
@@ -461,6 +467,79 @@ function mountWatchVideo(node, item) {
     };
 }
 
+function mountWatchVideoGrid(node, items) {
+    const sizer = node.querySelector('[class*="videoSizer_a21736"]');
+    if (!sizer) return null;
+    const parent = sizer.querySelector('[class*="videoContainer__1505a"]') ?? sizer;
+    parent.style.position ||= "relative";
+    const grid = document.createElement("div");
+    grid.setAttribute("data-hugin-watch-grid", "");
+    parent.insertBefore(grid, parent.firstChild);
+
+    const frames = [];
+    let anyPlaying = false;
+
+    for (const item of items.slice(0, 2)) {
+        const slot = document.createElement("div");
+        slot.setAttribute("data-hugin-watch-slot", streamIdOf(item));
+        grid.appendChild(slot);
+
+        const taken = takeStreamFrame(slot, null, item, "position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;pointer-events:none;");
+        if (!taken) continue;
+
+        const { frame } = taken;
+        const streamId = frame.dataset.huginStream;
+        const label = document.createElement("div");
+        label.setAttribute("data-hugin-watch-slot-label", "");
+        label.textContent = broadcasterName(item);
+        slot.appendChild(label);
+
+        const onMessage = event => {
+            if (event.source !== frame.contentWindow) return;
+            const data = event.data;
+
+            if (!item.mine && data && (data.action === "new-video-track-added" || vdoVideoStarted(data, streamId))) {
+                sendVolumeToStage(frame);
+            }
+
+            if (
+                data &&
+                frame.dataset.bitrate &&
+                (data.action === "new-video-track-added" || vdoVideoStarted(data, streamId))
+            ) {
+                frame.contentWindow?.postMessage(
+                    {
+                        bitrate: Number(frame.dataset.bitrate)
+                    },
+                    "*"
+                );
+            }
+
+            if (vdoVideoStarted(data, streamId)) {
+                const aspect = parseFloat(data.value);
+                if (aspect > 0.2 && aspect < 10) seenAspects.set(streamId, aspect);
+            }
+        };
+
+        addEventListener("message", onMessage);
+        frame.huginListener = onMessage;
+        frames.push(frame);
+        anyPlaying ||= taken.playing;
+
+        if (taken.playing && !item.mine) sendVolumeToStage(frame);
+    }
+
+    if (!frames.length) return null;
+    log("iframe grid:", frames.length, "streams");
+
+    return {
+        frame: frames[0],
+        frames,
+        playing: anyPlaying,
+        slot: null
+    };
+}
+
 /**
  * Sizes the stage tile, and any placeholder card, to the stream's aspect ratio within the stage.
  */
@@ -500,7 +579,11 @@ function syncWatchPresence() {
         return;
     }
 
-    if (streamers().some(item => item.key === watchScreen.item.key)) {
+    const live = streamers();
+    const watched = watchItemsOf(watchScreen.item);
+    const anyLive = watched.some(entry => entry.mine || live.some(item => item.key === entry.key));
+
+    if (anyLive) {
         if (watchScreen.placeholderKind === "ended") {
             if (watchScreen.frame) reloadStageFrame(watchScreen.frame);
             showStagePlaceholder("loading");
@@ -508,7 +591,7 @@ function syncWatchPresence() {
         return;
     }
 
-    if (watchScreen.item.mine) {
+    if (watched.some(entry => entry.mine)) {
         closeWatchScreen();
         return;
     }

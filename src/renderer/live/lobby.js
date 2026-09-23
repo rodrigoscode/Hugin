@@ -250,7 +250,7 @@ function openPendingWatch() {
     const item = streamers().find(entry => entry.key === pendingWatch.key);
     if (!item) return;
     pendingWatch = null;
-    openWatchScreen(item);
+    requestWatchStream(item);
 }
 
 function watchLobby() {

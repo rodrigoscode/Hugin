@@ -4,6 +4,7 @@
  */
 
 let streamFrame = null;
+const streamFrames = new Map();
 let frameParking = null;
 let navigationPath = location.pathname;
 
@@ -20,6 +21,14 @@ const PARKED_STAGE_FRAME_MS = 600;
 
 function streamIdOf(item) {
     return item.mine || item.simulated ? state.pushId : item.key;
+}
+
+function streamFrameKey(streamId, mine) {
+    return `${mine ? "own" : "view"}:${streamId}`;
+}
+
+function setActiveStreamFrame(entry) {
+    streamFrame = entry ?? null;
 }
 
 /**
@@ -60,7 +69,10 @@ function takeStreamFrame(parent, ref, item, style) {
     }
 
     const mine = Boolean(item.mine);
-    const current = streamFrame;
+    const key = streamFrameKey(streamId, mine);
+    const current = streamFrames.get(key);
+
+    if (current) setActiveStreamFrame(current);
 
     if (current && current.streamId === streamId && current.mine === mine && placeStreamFrame(parent, ref, style)) {
         return {
@@ -69,7 +81,7 @@ function takeStreamFrame(parent, ref, item, style) {
         };
     }
 
-    dropStreamFrame();
+    dropStreamFrame(streamId, mine);
     const frame = document.createElement("iframe");
     frame.setAttribute("data-hugin-video", "");
     frame.allow = "autoplay; fullscreen";
@@ -77,14 +89,18 @@ function takeStreamFrame(parent, ref, item, style) {
     frame.src = soloUrl(streamId, mine, itemQuality(item));
     frame.dataset.bitrate = String(requestedBitrate(itemQuality(item)));
     frame.dataset.huginStream = streamId;
+    frame.dataset.huginMine = mine ? "1" : "0";
     parent.insertBefore(frame, ref?.parentNode === parent ? ref : null);
 
-    streamFrame = {
+    const entry = {
         frame,
         streamId,
         mine,
         playing: false
     };
+
+    streamFrames.set(key, entry);
+    setActiveStreamFrame(entry);
 
     return {
         frame,
@@ -96,8 +112,9 @@ function takeStreamFrame(parent, ref, item, style) {
  * Keeps the frame alive off screen between the stage and the PiP. Returns false when it could not be
  * kept, in which case it is gone.
  */
-function parkStreamFrame() {
-    if (!streamFrame) return false;
+function parkStreamFrame(streamId = null, mine = null) {
+    const current = streamId ? streamFrames.get(streamFrameKey(streamId, Boolean(mine))) : streamFrame;
+    if (!current) return false;
 
     if (!frameParking?.isConnected) {
         frameParking = document.createElement("div");
@@ -106,19 +123,37 @@ function parkStreamFrame() {
         document.body.appendChild(frameParking);
     }
 
-    if (placeStreamFrame(frameParking, null, PIP_FRAME_STYLE)) return true;
-    dropStreamFrame();
+    const previous = streamFrame;
+    setActiveStreamFrame(current);
+    if (placeStreamFrame(frameParking, null, PIP_FRAME_STYLE)) {
+        setActiveStreamFrame(previous);
+        return true;
+    }
+    setActiveStreamFrame(previous);
+    dropStreamFrame(current.streamId, current.mine);
     return false;
 }
 
-function dropStreamFrame() {
-    streamFrame?.frame.remove();
-    streamFrame = null;
+function dropStreamFrame(streamId = null, mine = null) {
+    if (!streamId) {
+        streamFrame?.frame.remove();
+        for (const [key, entry] of streamFrames) {
+            if (entry === streamFrame) streamFrames.delete(key);
+        }
+        setActiveStreamFrame(null);
+        return;
+    }
+
+    const key = streamFrameKey(streamId, Boolean(mine));
+    const entry = streamFrames.get(key);
+    entry?.frame.remove();
+    streamFrames.delete(key);
+    if (streamFrame === entry) setActiveStreamFrame(null);
 }
 
 function trackStreamFrame(event) {
-    const current = streamFrame;
-    if (!current || event.source !== current.frame.contentWindow) return;
+    const current = [...streamFrames.values()].find(entry => event.source === entry.frame.contentWindow);
+    if (!current) return;
     const data = event.data;
     if (vdoVideoStarted(data, current.streamId)) current.playing = true;
     else if (data?.action === "end-view-connection") current.playing = false;

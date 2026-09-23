@@ -26,15 +26,20 @@ function closeWatchScreen(options = {}) {
     watchScreen.disableZoom?.();
     watchScreen.disableFullscreen?.();
     closeStageMenu();
+    closeWatchChoiceMenu();
     stageTooltips?.host.remove();
     stageTooltips = null;
     clearInterval(watchScreen.exitWatcher);
     watchScreen.hostElement?.removeAttribute("data-hugin-host");
     const iframeVideo = watchScreen.frame;
-    if (iframeVideo?.huginListener) removeEventListener("message", iframeVideo.huginListener);
-    clearInterval(iframeVideo?.huginWatchdog);
+    for (const frame of watchScreen.frames ?? (iframeVideo ? [iframeVideo] : [])) {
+        if (frame?.huginListener) removeEventListener("message", frame.huginListener);
+        clearInterval(frame?.huginWatchdog);
+    }
 
-    if (iframeVideo && streamFrame?.frame === iframeVideo) {
+    if ((watchScreen.frames?.length ?? 0) > 1) {
+        for (const frame of watchScreen.frames) dropStreamFrame(frame.dataset.huginStream, frame.dataset.huginMine === "1");
+    } else if (iframeVideo && streamFrame?.frame === iframeVideo) {
         if (options.keepFrame) parkStreamFrame();
         else dropStreamFrame();
     }
@@ -121,6 +126,101 @@ function dropWatchControls(node, options = {}) {
 }
 
 let pendingOpen = 0;
+const MAX_WATCH_STREAMS = 2;
+let watchChoiceMenu = null;
+
+function watchItemsOf(item) {
+    return Array.isArray(item?.items) && item.items.length ? item.items : item ? [item] : [];
+}
+
+function sameWatchStream(a, b) {
+    const left = a ? streamIdOf(a) : null;
+    const right = b ? streamIdOf(b) : null;
+    return Boolean(left && right && left === right);
+}
+
+function escapeWatchChoiceText(value) {
+    return String(value ?? "").replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+}
+
+function requestWatchStream(item) {
+    const current = watchItemsOf(watchScreen?.item);
+
+    if (!current.length || current.some(entry => sameWatchStream(entry, item))) {
+        openWatchScreen(item);
+        return;
+    }
+
+    openWatchChoiceMenu(item, current);
+}
+
+function closeWatchChoiceMenu() {
+    watchChoiceMenu?.host.remove();
+    watchChoiceMenu = null;
+}
+
+function openWatchChoiceMenu(item, current) {
+    closeWatchChoiceMenu();
+
+    const canJoin = current.length < MAX_WATCH_STREAMS;
+    const currentName = escapeWatchChoiceText(broadcasterName(current[0]) || "uma transmissão");
+    const nextName = escapeWatchChoiceText(broadcasterName(item) || "esta transmissão");
+    const { host, root } = mountShadow(
+        BASE_CSS +
+            `
+            .hugin-watch-choice-backdrop { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:auto; }
+            .hugin-watch-choice { width:360px; max-width:calc(100vw - 32px); padding:16px; border-radius:12px; color:var(--text-normal,#dbdee1); background:var(--modal-background,#313338); box-shadow:var(--elevation-high,0 8px 24px rgba(0,0,0,.35)); }
+            .hugin-watch-choice-title { margin:0 0 6px; color:var(--header-primary,#f2f3f5); font-size:16px; line-height:20px; font-weight:700; }
+            .hugin-watch-choice-text { margin:0 0 14px; color:var(--text-muted,#b5bac1); font-size:14px; line-height:20px; }
+            .hugin-watch-choice-actions { display:flex; justify-content:flex-end; gap:8px; }
+            .hugin-watch-choice-button { min-width:96px; height:38px; padding:0 14px; border:0; border-radius:4px; color:#fff; background:var(--button-secondary-background,#4e5058); font-size:14px; font-weight:500; cursor:pointer; }
+            .hugin-watch-choice-button:hover { background:var(--button-secondary-background-hover,#5c5e66); }
+            .hugin-watch-choice-button.primary { background:var(--button-positive-background,#248046); }
+            .hugin-watch-choice-button.primary:hover { background:var(--button-positive-background-hover,#1a6334); }
+            .hugin-watch-choice-button.link { min-width:auto; color:var(--text-normal,#dbdee1); background:transparent; }
+            .hugin-watch-choice-button.link:hover { text-decoration:underline; background:transparent; }
+        `
+    );
+
+    host.setAttribute("data-hugin-watch-choice", "");
+    const shell = document.createElement("div");
+    shell.className = "hugin-watch-choice-backdrop";
+    shell.innerHTML = `
+        <div class="hugin-watch-choice" role="dialog" aria-modal="true" aria-label="Escolher transmissão">
+            <h2 class="hugin-watch-choice-title">Assistir transmissão</h2>
+            <p class="hugin-watch-choice-text">Você já está assistindo ${currentName}. O que deseja fazer com ${nextName}?</p>
+            <div class="hugin-watch-choice-actions">
+                <button type="button" class="hugin-watch-choice-button link" data-action="cancel">Cancelar</button>
+                <button type="button" class="hugin-watch-choice-button" data-action="replace">Substituir</button>
+                ${canJoin ? '<button type="button" class="hugin-watch-choice-button primary" data-action="join">Assistir junto</button>' : ""}
+            </div>
+        </div>`;
+    root.appendChild(shell);
+
+    shell.addEventListener("click", event => {
+        if (event.target === shell) closeWatchChoiceMenu();
+    });
+
+    for (const button of shell.querySelectorAll("button[data-action]")) {
+        button.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            const action = button.getAttribute("data-action");
+            closeWatchChoiceMenu();
+
+            if (action === "join") {
+                openWatchScreen({
+                    ...current[0],
+                    items: [...current, item]
+                });
+            } else if (action === "replace") openWatchScreen(item);
+        });
+    }
+
+    watchChoiceMenu = {
+        host
+    };
+}
 
 function hasCallScreen(page) {
     return [...(page?.querySelectorAll('[class*="callContainer_cb9592"]') ?? [])].some(
@@ -183,6 +283,8 @@ function openWatchScreen(item) {
 function mountWatchScreen(item) {
     pendingOpen++;
     const page = chatPage();
+    const watchItems = watchItemsOf(item);
+    const primaryItem = watchItems[0] ?? item;
 
     if (!page) {
         dropStreamFrame();
@@ -206,11 +308,11 @@ function mountWatchScreen(item) {
     const node = shell.firstElementChild;
     node.setAttribute(WATCH_SCREEN_MARK, "");
     const overCallScreen = hasCallScreen(page);
-    if (!item.mine) swapDisconnectForStopWatching(node);
+    if (!primaryItem.mine) swapDisconnectForStopWatching(node);
 
     dropWatchControls(node, {
         keepChat: true,
-        viewer: !item.mine
+        viewer: !primaryItem.mine
     });
 
     node.style.flex = "1 1 auto";
@@ -221,12 +323,16 @@ function mountWatchScreen(item) {
     const tileTitle = node.querySelector('[class*="overlayTitleText__"]');
 
     if (tileTitle) {
-        tileTitle.textContent = broadcasterName(item);
+        tileTitle.textContent = watchItems.length > 1 ? "Transmissões" : broadcasterName(primaryItem);
         tileTitle.classList.remove("dnsFont__89a31", "newRocker__89a31");
     }
 
     const tileFocus = node.querySelector('[class*="videoWrapperAnimated_"] [class*="focusTarget__"]');
-    if (tileFocus) tileFocus.setAttribute("aria-label", "Janela de chamada, transmissão, " + broadcasterName(item));
+    if (tileFocus)
+        tileFocus.setAttribute(
+            "aria-label",
+            "Janela de chamada, transmissão, " + (watchItems.length > 1 ? "múltiplas transmissões" : broadcasterName(primaryItem))
+        );
 
     const stage =
         node.querySelector('[class*="videoSizer_a21736"]') ?? node.querySelector('[class*="root_bfe55a"]') ?? node;
@@ -235,10 +341,11 @@ function mountWatchScreen(item) {
     const channelText = h1 && [...h1.childNodes].reverse().find(child => child.nodeType === 3);
     if (channelText) channelText.nodeValue = state.channelName || "Voz";
     const name = node.querySelector('[class*="headerWrapper"] [class*="lineClamp1__"]');
-    if (name) name.textContent = item.mine ? "Sua transmissão" : `Tela de ${item.label}`;
-    const own = item.mine || item.simulated;
-    const owner = own ? state.userId : streamOwner(item.key, state.streams.get(item.key));
-    const photo = (own ? state.avatarUrl : item.avatar) || avatarFor(owner, null);
+    if (name)
+        name.textContent = watchItems.length > 1 ? "Tela dividida" : primaryItem.mine ? "Sua transmissão" : `Tela de ${primaryItem.label}`;
+    const own = primaryItem.mine || primaryItem.simulated;
+    const owner = own ? state.userId : streamOwner(primaryItem.key, state.streams.get(primaryItem.key));
+    const photo = (own ? state.avatarUrl : primaryItem.avatar) || avatarFor(owner, null);
 
     for (const img of node.querySelectorAll('img[class*="avatar__44b0c"]')) {
         if (photo) img.setAttribute("src", photo);
@@ -248,18 +355,18 @@ function mountWatchScreen(item) {
     for (const decoration of node.querySelectorAll('[class*="avatarDecoration__44b0c"]')) decoration.remove();
 
     for (const frameElement of node.querySelectorAll('[class*="wrapper__44b0c"][aria-label]')) {
-        frameElement.setAttribute("aria-label", broadcasterName(item));
+        frameElement.setAttribute("aria-label", watchItems.length > 1 ? "Transmissões" : broadcasterName(primaryItem));
     }
 
     node.querySelector('[class*="premiumStreamIcon__"]')?.remove();
 
     const quality =
-        item.mine || item.simulated
+        primaryItem.mine || primaryItem.simulated
             ? {
                   height: state.resolution,
                   fps: state.fps
               }
-            : item.quality;
+            : primaryItem.quality;
 
     const resolutionText = node.querySelector('[class*="qualityResolution__"]');
 
@@ -349,15 +456,15 @@ function mountWatchScreen(item) {
 
     document.addEventListener("keydown", onWatchScreenKey, true);
     wireWatchControls(node);
-    if (!item.mine) dropBroadcastButton(node);
-    const initialAspect = knownAspect(item);
+    if (!primaryItem.mine) dropBroadcastButton(node);
+    const initialAspect = watchItems.length > 1 ? (16 / 9) * watchItems.length : knownAspect(primaryItem);
     if (initialAspect) node.dataset.huginAspect = String(initialAspect);
-    const video = mountWatchVideo(node, item);
+    const video = watchItems.length > 1 ? mountWatchVideoGrid(node, watchItems) : mountWatchVideo(node, primaryItem);
     if (!video) dropStreamFrame();
-    const volume = mountWatchVolume(node, item);
+    const volume = watchItems.length > 1 ? null : mountWatchVolume(node, primaryItem);
     fitWatchStage(node);
     const disableFullscreen = bindFullscreen(node);
-    const disableZoom = video ? bindStageZoom(node, item) : null;
+    const disableZoom = video && watchItems.length === 1 ? bindStageZoom(node, primaryItem) : null;
     bindStageMenu(node);
     releaseFocusAfterClick(node);
     const stageRoot = node.querySelector('[class*="root__6981d"]');
@@ -371,7 +478,8 @@ function mountWatchScreen(item) {
     watchScreen = {
         node,
         hidden,
-        item,
+        item: watchItems.length > 1 ? { ...primaryItem, items: watchItems } : primaryItem,
+        items: watchItems,
         observer: observer,
         chatObserver: chatObserver,
         hostElement: hostElement,
@@ -381,6 +489,7 @@ function mountWatchScreen(item) {
         placeholder: null,
         placeholderKind: null,
         frame: video?.frame ?? null,
+        frames: video?.frames ?? (video?.frame ? [video.frame] : []),
         frameSlot: video?.slot ?? null,
         parkedAt: 0
     };
@@ -400,7 +509,7 @@ function mountWatchScreen(item) {
         }
     }, 250);
 
-    if (video && !video.playing) showStagePlaceholder("loading");
+    if (video && !video.playing && watchItems.length === 1) showStagePlaceholder("loading");
     const IDLE_MS = 2000;
 
     const IDLE_CLASSES = [
@@ -446,7 +555,7 @@ function mountWatchScreen(item) {
     wake();
 
     stageView = {
-        item,
+        item: primaryItem,
         screen: stage
     };
 
