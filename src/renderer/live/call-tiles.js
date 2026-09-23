@@ -114,7 +114,7 @@ function createCallTile(owner, item) {
         event.preventDefault();
         event.stopPropagation();
         const current = streamerForUser(owner);
-        if (current) openWatchScreen(current);
+        if (current) requestWatchStream(current);
     });
 
     return cell;

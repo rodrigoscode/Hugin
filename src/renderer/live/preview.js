@@ -317,7 +317,7 @@ function openLivePreview(item, rowEl) {
         closeLivePreview();
 
         if (item.lobby && item.lobby.channelId !== state.channelId) joinCallAndWatch(item);
-        else openWatchScreen(item);
+        else requestWatchStream(item);
     };
 
     const main = wrapper.querySelector('[class*="watchStreamRow__"] button');
@@ -325,7 +325,8 @@ function openLivePreview(item, rowEl) {
 
     const watching =
         !item.mine &&
-        ((Boolean(watchScreen?.node.isConnected) && watchScreen.item.key === item.key) || pip?.item.key === item.key);
+        ((Boolean(watchScreen?.node.isConnected) && watchItemsOf(watchScreen.item).some(entry => entry.key === item.key)) ||
+            pip?.item.key === item.key);
 
     const buttonText = item.mine
         ? "Você está transmitindo!"
