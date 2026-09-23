@@ -25,6 +25,8 @@ const state = {
     isFullScreenShare: false,
     volume: 1,
     lastVolume: 1,
+    streamVolumes: new Map(),
+    streamMuted: new Map(),
     avatarUrl: null,
     userId: null,
     userName: "",

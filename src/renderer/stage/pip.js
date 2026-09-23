@@ -167,14 +167,14 @@ function attachPipVideo(surface, item) {
     };
 
     showSpinner(!taken.playing);
-    if (taken.playing && !item.mine) sendVolumeToStage(frame);
+    if (taken.playing && !item.mine) sendVolumeToStage(frame, streamId);
 
     const listener = event => {
         if (event.source !== frame.contentWindow) return;
         const data = event.data;
         const videoStarted = data && (data.action === "new-video-track-added" || vdoVideoStarted(data, streamId));
 
-        if (!item.mine && videoStarted) sendVolumeToStage(frame);
+        if (!item.mine && videoStarted) sendVolumeToStage(frame, streamId);
 
         if (videoStarted && frame.dataset.bitrate) {
             frame.contentWindow?.postMessage(

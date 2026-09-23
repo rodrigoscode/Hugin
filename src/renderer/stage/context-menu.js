@@ -73,19 +73,21 @@ function bindStageMenu(node) {
             x: event.clientX,
             y: event.clientY
         };
+        const slot = event.target.closest?.("[data-hugin-watch-slot]");
+        const streamId = slot?.getAttribute("data-hugin-watch-slot") || watchScreen.focusedStreamId || streamIdOf(watchScreen.item);
 
         if (watchScreen.item.mine)
             openStreamMenu(null, {
                 point: point
             });
-        else openViewerMenu(point);
+        else openViewerMenu(point, streamId);
     });
 }
 
 /**
  * The viewer's stage context menu: stop watching, mute, and volume up to 200%.
  */
-function openViewerMenu(point) {
+function openViewerMenu(point, streamId = null) {
     closeStageMenu();
     if (streamMenu) closeStreamMenu();
 
@@ -110,26 +112,27 @@ function openViewerMenu(point) {
         event.preventDefault();
         event.stopPropagation();
         closeStageMenu();
-        closeWatchScreen();
+        stopWatchingStream(streamId);
     });
 
     const muteItem = menu.querySelector("#stream-context-mute");
     const checkbox = muteItem?.querySelector('[class*="checkboxOption__714a9"]');
 
     const reflectMute = () => {
-        muteItem?.setAttribute("aria-checked", String(Boolean(state.muted)));
+        const muted = streamMuted(streamId);
+        muteItem?.setAttribute("aria-checked", String(muted));
 
-        if (state.muted) checkbox?.setAttribute("data-selected", "true");
+        if (muted) checkbox?.setAttribute("data-selected", "true");
         else checkbox?.removeAttribute("data-selected");
     };
 
     muteItem?.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
-        state.muted = !state.muted;
+        setStreamMuted(streamId, !streamMuted(streamId));
         reflectMute();
-        sendVolumeToStage();
-        watchScreen?.volume?.redraw();
+        sendVolumeToStage(null, streamId);
+        if (!streamId) watchScreen?.volume?.redraw();
     });
 
     reflectMute();
@@ -140,7 +143,7 @@ function openViewerMenu(point) {
     const text = volume?.querySelector('[class*="hiddenVisually_"]');
 
     const drawVolume = () => {
-        const percent = Math.round(Math.max(0, Math.min(2, state.volume ?? 1)) * 100);
+        const percent = Math.round(Math.max(0, Math.min(2, streamVolume(streamId))) * 100);
         volume?.setAttribute("aria-valuenow", String(percent));
         if (fillElement) fillElement.style.width = percent / 2 + "%";
         if (grabber) grabber.style.left = percent / 2 + "%";
@@ -149,15 +152,15 @@ function openViewerMenu(point) {
 
     const volumeAtPoint = event => {
         const r = track.getBoundingClientRect();
-        return r.width > 0 ? Math.min(2, Math.max(0, (event.clientX - r.left) / r.width) * 2) : (state.volume ?? 1);
+        return r.width > 0 ? Math.min(2, Math.max(0, (event.clientX - r.left) / r.width) * 2) : streamVolume(streamId);
     };
 
     const setVolume = value => {
-        if (watchScreen?.volume) {
+        if (!streamId && watchScreen?.volume) {
             watchScreen.volume.apply(value);
         } else {
-            state.volume = value;
-            sendVolumeToStage();
+            setStreamVolume(streamId, value);
+            sendVolumeToStage(null, streamId);
         }
 
         drawVolume();

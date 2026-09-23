@@ -60,7 +60,7 @@ function placeStreamFrame(parent, ref, style) {
  * The stream's frame for the stage or the PiP: the current one moved into place when it plays the same
  * stream, otherwise a new one. playing tells whether its video is already on screen.
  */
-function takeStreamFrame(parent, ref, item, style) {
+function takeStreamFrame(parent, ref, item, style, options = {}) {
     const streamId = streamIdOf(item);
 
     if (!streamId) {
@@ -70,6 +70,7 @@ function takeStreamFrame(parent, ref, item, style) {
 
     const mine = Boolean(item.mine);
     const key = streamFrameKey(streamId, mine);
+    if (options.fresh) dropStreamFrame(streamId, mine);
     const current = streamFrames.get(key);
 
     if (current) setActiveStreamFrame(current);

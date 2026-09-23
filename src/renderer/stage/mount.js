@@ -133,6 +133,19 @@ function watchItemsOf(item) {
     return Array.isArray(item?.items) && item.items.length ? item.items : item ? [item] : [];
 }
 
+function watchedItems() {
+    return watchItemsOf(watchScreen?.item);
+}
+
+function itemForStreamId(streamId, items = watchedItems()) {
+    return items.find(item => streamIdOf(item) === streamId) ?? null;
+}
+
+function liveWatchedItems(items = watchedItems()) {
+    const live = streamers();
+    return items.filter(item => item.mine || live.some(entry => entry.key === item.key));
+}
+
 function sameWatchStream(a, b) {
     const left = a ? streamIdOf(a) : null;
     const right = b ? streamIdOf(b) : null;
@@ -152,6 +165,22 @@ function requestWatchStream(item) {
     }
 
     openWatchChoiceMenu(item, current);
+}
+
+function stopWatchingStream(streamId = null) {
+    const items = watchedItems();
+
+    if (items.length <= 1) {
+        closeWatchScreen();
+        return;
+    }
+
+    const target = streamId && itemForStreamId(streamId, items) ? streamId : watchScreen?.focusedStreamId || streamIdOf(items[items.length - 1]);
+    const remaining = items.filter(item => streamIdOf(item) !== target);
+
+    if (remaining.length === 1) openWatchScreen(remaining[0]);
+    else if (remaining.length > 1) openWatchScreen({ ...remaining[0], items: remaining });
+    else closeWatchScreen();
 }
 
 function closeWatchChoiceMenu() {
@@ -285,6 +314,7 @@ function mountWatchScreen(item) {
     const page = chatPage();
     const watchItems = watchItemsOf(item);
     const primaryItem = watchItems[0] ?? item;
+    const wasMultiWatch = (watchScreen?.frames?.length ?? 0) > 1;
 
     if (!page) {
         dropStreamFrame();
@@ -457,9 +487,9 @@ function mountWatchScreen(item) {
     document.addEventListener("keydown", onWatchScreenKey, true);
     wireWatchControls(node);
     if (!primaryItem.mine) dropBroadcastButton(node);
-    const initialAspect = watchItems.length > 1 ? (16 / 9) * watchItems.length : knownAspect(primaryItem);
+    const initialAspect = watchItems.length > 1 ? gridAspectFor(watchItems) : knownAspect(primaryItem);
     if (initialAspect) node.dataset.huginAspect = String(initialAspect);
-    const video = watchItems.length > 1 ? mountWatchVideoGrid(node, watchItems) : mountWatchVideo(node, primaryItem);
+    const video = watchItems.length > 1 ? mountWatchVideoGrid(node, watchItems) : mountWatchVideo(node, primaryItem, { fresh: wasMultiWatch });
     if (!video) dropStreamFrame();
     const volume = watchItems.length > 1 ? null : mountWatchVolume(node, primaryItem);
     fitWatchStage(node);
@@ -491,6 +521,8 @@ function mountWatchScreen(item) {
         frame: video?.frame ?? null,
         frames: video?.frames ?? (video?.frame ? [video.frame] : []),
         frameSlot: video?.slot ?? null,
+        grid: video?.grid ?? null,
+        focusedStreamId: null,
         parkedAt: 0
     };
 
