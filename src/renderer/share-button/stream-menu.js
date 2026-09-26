@@ -172,10 +172,23 @@ function openStreamMenu(anchor, options = {}) {
     root.appendChild(node);
     const rows = [...node.querySelectorAll('[class*="item_c1e9c4"]')];
     const byText = text => rows.find(row => (row.textContent || "").trim().startsWith(text));
+    const changeRow = byText("Alterar a Transmissão");
+
+    if (changeRow) {
+        const mobileRow = changeRow.cloneNode(true);
+        mobileRow.id = "manage-streams-watch-mobile";
+        mobileRow.querySelector('[class*="text_a4ac84"], [class*="label_c1e9c4"]')?.replaceChildren("Assistir no celular");
+        const icon = document.createElement("template");
+        icon.innerHTML = '<svg aria-hidden="true" class="icon_c1e9c4" role="img" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"><path fill="currentColor" d="M8 2a3 3 0 0 0-3 3v14a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3V5a3 3 0 0 0-3-3H8Zm0 2h8a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm3 13a1 1 0 1 0 0 2h2a1 1 0 1 0 0-2h-2Z"></path></svg>';
+        mobileRow.querySelector("svg")?.replaceWith(icon.content.firstElementChild);
+        changeRow.after(mobileRow);
+        rows.splice(rows.indexOf(changeRow) + 1, 0, mobileRow);
+    }
 
     const actions = [
         ["Parar de transmitir", () => stopBroadcast().catch(err => log("stopBroadcast:", err))],
-        ["Alterar a Transmissão", () => openShareModal()]
+        ["Alterar a Transmissão", () => openShareModal()],
+        ["Assistir no celular", () => openMobileWatchModal()]
     ];
 
     for (const [text, action] of actions) {

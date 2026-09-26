@@ -129,6 +129,7 @@ function watchVoiceChannel() {
         // Like Discord, leaving the call or being moved to another channel (the AFK one included) stops watching.
         closePip();
         closeWatchScreen();
+        dropAllStreamFrames();
 
         if (state.broadcasting) await stopBroadcast();
         await leaveRoom();

@@ -111,6 +111,18 @@ function soloUrl(streamId, muted, quality = null, extra = null) {
     })}${config.extraViewParams ? "&" + config.extraViewParams : ""}&base64css=${vdoStageCss()}`;
 }
 
+function mobileWatchUrl() {
+    if (!state.broadcasting || !state.pushId || !state.room) return "";
+    return `${vdoBase()}/?${query({
+        room: state.room,
+        scene: true,
+        view: state.pushId,
+        autostart: true,
+        password: state.roomPassword || undefined,
+        videobitrate: bitrateCeiling()
+    })}${config.extraViewParams ? "&" + config.extraViewParams : ""}`;
+}
+
 function sceneUrl(room, excludeId) {
     return `${vdoBase()}/?${query({
         room,

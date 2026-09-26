@@ -167,14 +167,14 @@ function attachPipVideo(surface, item) {
     };
 
     showSpinner(!taken.playing);
-    if (taken.playing && !item.mine) sendVolumeToStage(frame);
+    if (taken.playing && !item.mine) sendVolumeToStage(frame, streamId);
 
     const listener = event => {
         if (event.source !== frame.contentWindow) return;
         const data = event.data;
         const videoStarted = data && (data.action === "new-video-track-added" || vdoVideoStarted(data, streamId));
 
-        if (!item.mine && videoStarted) sendVolumeToStage(frame);
+        if (!item.mine && videoStarted) sendVolumeToStage(frame, streamId);
 
         if (videoStarted && frame.dataset.bitrate) {
             frame.contentWindow?.postMessage(
@@ -262,9 +262,9 @@ function closePip(options = {}) {
     if (streamMenu && pip.host.shadowRoot?.contains(streamMenu.anchor)) closeStreamMenu();
     if (pip.listener) removeEventListener("message", pip.listener);
 
-    if (pip.frame && streamFrame?.frame === pip.frame) {
-        if (options.keepFrame) parkStreamFrame();
-        else dropStreamFrame();
+    if (pip.frame) {
+        if (options.keepFrame) parkStreamFrame(pip.frame.dataset.huginStream, pip.frame.dataset.huginMine === "1");
+        else dropStreamFrame(pip.frame.dataset.huginStream, pip.frame.dataset.huginMine === "1");
     }
 
     pip.host.remove();

@@ -25,6 +25,7 @@ ui/gear-animation.js
 ui/share-quality.js
 ui/share-sources.js
 ui/share-modal.js
+ui/mobile-watch-modal.js
 ui/render.js
 flow/broadcast.js
 flow/scene.js

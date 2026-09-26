@@ -41,6 +41,9 @@ function ensureWatchStyle() {
         "[data-hugin-watch-screen] .callContainer_cb9592 { border-top-width: 0 !important; border-inline-end-width: 0 !important; }" +
         "[data-hugin-watch-grid] { position:absolute; inset:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; background:#000; padding:8px; box-sizing:border-box; z-index:1; }" +
         "[data-hugin-watch-slot] { position:relative; min-width:0; min-height:0; overflow:hidden; border-radius:8px; background:#000; }" +
+        "[data-hugin-watch-grid][data-hugin-focused] { display:block; }" +
+        "[data-hugin-watch-grid][data-hugin-focused] > [data-hugin-watch-slot] { display:none; position:absolute; inset:0; border-radius:8px; }" +
+        "[data-hugin-watch-grid][data-hugin-focused] > [data-hugin-slot-focused] { display:block; }" +
         "[data-hugin-watch-slot-label] { position:absolute; left:10px; bottom:8px; right:10px; z-index:2; color:#fff; font:600 13px/18px var(--font-primary); text-shadow:0 1px 3px #000; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; pointer-events:none; }";
 
     document.head.appendChild(style);
@@ -132,17 +135,62 @@ function syncIframeBitrates() {
     for (const [item, frame] of targets) {
         if (!item || !frame?.contentWindow || !frame.isConnected) continue;
         const current = item.mine || item.simulated ? item : (list.find(entry => entry.key === item.key) ?? item);
-        const bitrate = String(requestedBitrate(itemQuality(current)));
-        if (frame.dataset.bitrate === bitrate) continue;
-        frame.dataset.bitrate = bitrate;
-        frame.contentWindow.postMessage(
-            {
-                bitrate: Number(bitrate)
-            },
-            "*"
-        );
-        log("bitrate requested from the broadcaster:", bitrate, "kbps", item.mine ? "(own)" : item.label);
+        applyFrameBitrate(frame, current);
     }
+}
+
+function postFrameBitrate(frame) {
+    const bitrate = Number(frame?.dataset.bitrate);
+    if (!frame?.contentWindow || !Number.isFinite(bitrate) || bitrate <= 0) return;
+    frame.contentWindow.postMessage(
+        {
+            bitrate
+        },
+        "*"
+    );
+}
+
+function applyFrameBitrate(frame, item, options = {}) {
+    if (!frame?.contentWindow || !frame.isConnected || !item) return;
+    const bitrate = String(requestedBitrate(itemQuality(item)));
+    if (!options.force && frame.dataset.bitrate === bitrate) return;
+    frame.dataset.bitrate = bitrate;
+    postFrameBitrate(frame);
+    log("bitrate requested from the broadcaster:", bitrate, "kbps", item.mine ? "(own)" : item.label);
+}
+
+function primeFrameBitrate(frame, item) {
+    applyFrameBitrate(frame, item, {
+        force: true
+    });
+
+    for (const delay of [500, 1500, 3500]) {
+        setTimeout(() => applyFrameBitrate(frame, item, { force: true }), delay);
+    }
+}
+
+function streamVolume(streamId) {
+    return streamId && state.streamVolumes.has(streamId) ? state.streamVolumes.get(streamId) : (state.volume ?? 1);
+}
+
+function streamMuted(streamId) {
+    return streamId && state.streamMuted.has(streamId) ? state.streamMuted.get(streamId) : Boolean(state.muted);
+}
+
+function setStreamVolume(streamId, value) {
+    const volume = Math.max(0, Math.min(2, value));
+    if (streamId) state.streamVolumes.set(streamId, volume);
+    else state.volume = volume;
+}
+
+function setStreamMuted(streamId, muted) {
+    if (streamId) state.streamMuted.set(streamId, Boolean(muted));
+    else state.muted = Boolean(muted);
+}
+
+function frameForStream(streamId) {
+    if (!streamId) return watchScreen?.frame ?? null;
+    return (watchScreen?.frames ?? []).find(frame => frame.dataset.huginStream === streamId) ?? null;
 }
 
 /**
@@ -150,10 +198,11 @@ function syncIframeBitrates() {
  * node above it. The gain node plays the stream through Web Audio, which can cut the sound, so it only
  * comes in once the volume passes 100%, and then keeps the level for that frame.
  */
-function sendVolumeToStage(frame) {
-    const target = frame ?? watchScreen?.frame;
+function sendVolumeToStage(frame = null, streamId = null) {
+    const target = frame ?? frameForStream(streamId);
     if (!target?.contentWindow) return;
-    const level = state.muted ? 0 : Math.max(0, Math.min(2, state.volume ?? 1));
+    const id = streamId || target.dataset.huginStream || null;
+    const level = streamMuted(id) ? 0 : Math.max(0, Math.min(2, streamVolume(id)));
 
     target.contentWindow.postMessage(
         {
@@ -162,13 +211,12 @@ function sendVolumeToStage(frame) {
         "*"
     );
 
-    const streamId = target.dataset.huginStream;
     if (level > 1) target.dataset.huginGain = "on";
 
-    if (streamId && target.dataset.huginGain === "on" && native.setStreamGain) {
+    if (id && target.dataset.huginGain === "on" && native.setStreamGain) {
         native
             .setStreamGain({
-                streamId,
+                streamId: id,
                 gain: level
             })
             .catch(err => log("setStreamGain:", String(err)));
@@ -177,6 +225,7 @@ function sendVolumeToStage(frame) {
 
 function mountWatchVolume(node, item) {
     if (item?.mine) return;
+    const streamId = streamIdOf(item);
     const corner = node.querySelector('[class*="edgeControlsEnd_bfe55a"]');
     if (!corner) return;
     const shell = document.createElement("div");
@@ -190,7 +239,7 @@ function mountWatchVolume(node, item) {
     let currentShape = null;
 
     const draw = () => {
-        const v = state.muted ? 0 : Math.max(0, Math.min(1, state.volume ?? 1));
+        const v = streamMuted(streamId) ? 0 : Math.max(0, Math.min(1, streamVolume(streamId)));
         if (bar) {
             bar.style.width = `${Math.round(v * 100)}%`;
             bar.classList.toggle("fakeEdges_b26b79", v > 0);
@@ -208,10 +257,10 @@ function mountWatchVolume(node, item) {
     };
 
     const apply = value => {
-        state.volume = Math.max(0, Math.min(2, value));
+        setStreamVolume(streamId, value);
         draw();
         syncViewBounds();
-        sendVolumeToStage();
+        sendVolumeToStage(null, streamId);
     };
 
     const track = control.querySelector('[class*="mediaBarWrapper_"]');
@@ -220,7 +269,7 @@ function mountWatchVolume(node, item) {
 
     const levelAtPoint = event => {
         const box = track.getBoundingClientRect();
-        return box.height > 0 ? (box.bottom - event.clientY) / box.height : (state.volume ?? 1);
+        return box.height > 0 ? (box.bottom - event.clientY) / box.height : streamVolume(streamId);
     };
 
     interaction?.addEventListener("mousedown", event => {
@@ -272,15 +321,15 @@ function mountWatchVolume(node, item) {
         event.preventDefault();
         event.stopPropagation();
 
-        if (state.muted) {
-            state.muted = false;
+        if (streamMuted(streamId)) {
+            setStreamMuted(streamId, false);
             draw();
-            sendVolumeToStage();
+            sendVolumeToStage(null, streamId);
             return;
         }
 
-        if ((state.volume ?? 1) > 0) {
-            previous = state.volume ?? 1;
+        if (streamVolume(streamId) > 0) {
+            previous = streamVolume(streamId);
             apply(0);
         } else apply(previous || 1);
     });
@@ -343,7 +392,7 @@ function vdoVideoStarted(data, streamId) {
  * Mounts the stream's VDO.Ninja iframe in the stage and follows its messages: first frame, aspect
  * ratio and connection end.
  */
-function mountWatchVideo(node, item) {
+function mountWatchVideo(node, item, options = {}) {
     const sizer = node.querySelector('[class*="videoSizer_a21736"]');
     if (!sizer) return null;
     const zoomBox = sizer.querySelector('[class*="videoContainer__1505a"]');
@@ -368,7 +417,7 @@ function mountWatchVideo(node, item) {
         };
     }
 
-    const taken = takeStreamFrame(slot.parent, slot.ref, item, STAGE_FRAME_STYLE);
+    const taken = takeStreamFrame(slot.parent, slot.ref, item, STAGE_FRAME_STYLE, options);
 
     if (!taken) {
         log("no stream id for the iframe:", item.key);
@@ -405,21 +454,16 @@ function mountWatchVideo(node, item) {
         }
 
         if (!item.mine && data && (data.action === "new-video-track-added" || vdoVideoStarted(data, streamId))) {
-            sendVolumeToStage(frame);
+            sendVolumeToStage(frame, streamId);
         }
 
-        if (
-            data &&
-            frame.dataset.bitrate &&
-            (data.action === "new-video-track-added" || vdoVideoStarted(data, streamId))
-        ) {
-            frame.contentWindow?.postMessage(
-                {
-                    bitrate: Number(frame.dataset.bitrate)
-                },
-                "*"
-            );
-        }
+            if (
+                data &&
+                frame.dataset.bitrate &&
+                (data.action === "new-video-track-added" || vdoVideoStarted(data, streamId))
+            ) {
+                postFrameBitrate(frame);
+            }
 
         if (vdoVideoStarted(data, streamId)) {
             const aspect = parseFloat(data.value);
@@ -450,7 +494,9 @@ function mountWatchVideo(node, item) {
     addEventListener("message", onMessage);
     frame.huginListener = onMessage;
     frame.huginWatchdog = setInterval(() => reloadStuckStage(frame, streamId), 2000);
-    if (taken.playing && !item.mine) sendVolumeToStage(frame);
+    primeFrameBitrate(frame, item);
+    sendVolumeToStage(frame, streamId);
+    if (taken.playing && !item.mine) sendVolumeToStage(frame, streamId);
 
     log(
         "iframe video:",
@@ -482,6 +528,11 @@ function mountWatchVideoGrid(node, items) {
     for (const item of items.slice(0, 2)) {
         const slot = document.createElement("div");
         slot.setAttribute("data-hugin-watch-slot", streamIdOf(item));
+        slot.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            toggleWatchFocus(streamIdOf(item));
+        });
         grid.appendChild(slot);
 
         const taken = takeStreamFrame(slot, null, item, "position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;pointer-events:none;");
@@ -499,7 +550,7 @@ function mountWatchVideoGrid(node, items) {
             const data = event.data;
 
             if (!item.mine && data && (data.action === "new-video-track-added" || vdoVideoStarted(data, streamId))) {
-                sendVolumeToStage(frame);
+                sendVolumeToStage(frame, streamId);
             }
 
             if (
@@ -507,12 +558,7 @@ function mountWatchVideoGrid(node, items) {
                 frame.dataset.bitrate &&
                 (data.action === "new-video-track-added" || vdoVideoStarted(data, streamId))
             ) {
-                frame.contentWindow?.postMessage(
-                    {
-                        bitrate: Number(frame.dataset.bitrate)
-                    },
-                    "*"
-                );
+                postFrameBitrate(frame);
             }
 
             if (vdoVideoStarted(data, streamId)) {
@@ -523,10 +569,12 @@ function mountWatchVideoGrid(node, items) {
 
         addEventListener("message", onMessage);
         frame.huginListener = onMessage;
+        primeFrameBitrate(frame, item);
+        sendVolumeToStage(frame, streamId);
         frames.push(frame);
         anyPlaying ||= taken.playing;
 
-        if (taken.playing && !item.mine) sendVolumeToStage(frame);
+        if (taken.playing && !item.mine) sendVolumeToStage(frame, streamId);
     }
 
     if (!frames.length) return null;
@@ -536,8 +584,44 @@ function mountWatchVideoGrid(node, items) {
         frame: frames[0],
         frames,
         playing: anyPlaying,
-        slot: null
+        slot: null,
+        grid
     };
+}
+
+function gridAspectFor(items) {
+    return items.length > 1 ? (16 / 9) * Math.min(2, items.length) : 16 / 9;
+}
+
+function applyWatchFocus(streamId = null) {
+    if (!watchScreen?.node) return;
+    const items = watchedItems();
+    const grid = watchScreen.node.querySelector("[data-hugin-watch-grid]");
+    if (!grid || items.length <= 1) return;
+
+    const focusedItem = streamId ? itemForStreamId(streamId, items) : null;
+    watchScreen.focusedStreamId = focusedItem ? streamId : null;
+
+    if (focusedItem) grid.setAttribute("data-hugin-focused", streamId);
+    else grid.removeAttribute("data-hugin-focused");
+
+    for (const slot of grid.querySelectorAll("[data-hugin-watch-slot]")) {
+        const focused = focusedItem && slot.getAttribute("data-hugin-watch-slot") === streamId;
+        if (focused) slot.setAttribute("data-hugin-slot-focused", "");
+        else slot.removeAttribute("data-hugin-slot-focused");
+    }
+
+    const aspect = focusedItem ? knownAspect(focusedItem) || 16 / 9 : gridAspectFor(items);
+    watchScreen.node.dataset.huginAspect = String(aspect);
+    fitWatchStage(watchScreen.node);
+
+    const frame = (watchScreen.frames ?? []).find(entry => entry.dataset.huginStream === streamId);
+    if (focusedItem && frame) primeFrameBitrate(frame, focusedItem);
+}
+
+function toggleWatchFocus(streamId) {
+    if (!streamId || watchedItems().length <= 1) return;
+    applyWatchFocus(watchScreen?.focusedStreamId === streamId ? null : streamId);
 }
 
 /**
@@ -579,9 +663,15 @@ function syncWatchPresence() {
         return;
     }
 
-    const live = streamers();
     const watched = watchItemsOf(watchScreen.item);
-    const anyLive = watched.some(entry => entry.mine || live.some(item => item.key === entry.key));
+    const liveWatched = liveWatchedItems(watched);
+    const anyLive = liveWatched.length > 0;
+
+    if (watched.length > 1 && liveWatched.length < watched.length) {
+        if (liveWatched.length === 1) openWatchScreen(liveWatched[0]);
+        else closeWatchScreen();
+        return;
+    }
 
     if (anyLive) {
         if (watchScreen.placeholderKind === "ended") {
