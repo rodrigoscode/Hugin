@@ -91,6 +91,73 @@ function copyMobileWatch(button, text, label) {
         .catch(err => log("copy mobile link:", String(err)));
 }
 
+function visibleMessageBox(element) {
+    if (!element || element.closest("[data-hugin]")) return false;
+    const box = element.getBoundingClientRect();
+    if (box.width < 80 || box.height < 16) return false;
+    const style = getComputedStyle(element);
+    return style.visibility !== "hidden" && style.display !== "none" && style.pointerEvents !== "none";
+}
+
+function findMessageBox() {
+    const selectors = [
+        '[role="textbox"][contenteditable="true"]',
+        '[data-slate-editor="true"][contenteditable="true"]',
+        '.slateTextArea[contenteditable="true"]',
+        'div[contenteditable="true"]'
+    ];
+
+    const boxes = selectors.flatMap(selector => [...document.querySelectorAll(selector)]).filter(visibleMessageBox);
+    return boxes.at(-1) ?? null;
+}
+
+function insertIntoMessageBox(box, text) {
+    box.focus();
+
+    if (box instanceof HTMLTextAreaElement || box instanceof HTMLInputElement) {
+        box.setRangeText(text, box.selectionStart ?? box.value.length, box.selectionEnd ?? box.value.length, "end");
+        box.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
+        return true;
+    }
+
+    const selection = window.getSelection();
+    if (selection && !selection.rangeCount) {
+        const range = document.createRange();
+        range.selectNodeContents(box);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+
+    const data = new DataTransfer();
+    data.setData("text/plain", text);
+    const paste = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data });
+    box.dispatchEvent(paste);
+
+    if (!paste.defaultPrevented && document.queryCommandSupported?.("insertText")) {
+        document.execCommand("insertText", false, text);
+    }
+
+    box.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
+    return true;
+}
+
+function prepareMobileWatchChat(text) {
+    closeMobileWatchModal();
+    setTimeout(() => {
+        const box = findMessageBox();
+        const inserted = box ? insertIntoMessageBox(box, text) : false;
+
+        if (inserted) {
+            log("mobile watch message prepared in chat");
+            return;
+        }
+
+        native.copy(text).catch(err => log("copy mobile message fallback:", String(err)));
+        log("mobile watch message: chat box not found; copied instead");
+    }, 220);
+}
+
 function closeMobileWatchModal() {
     const modal = mobileWatchModal;
     if (!modal) return;
@@ -127,7 +194,7 @@ function openMobileWatchModal() {
             <textarea class="mobile-link" rows="3" readonly></textarea>
             <div class="mobile-actions">
                 <button class="mobile-button" type="button" data-copy-link>Copiar link</button>
-                <button class="mobile-button secondary" type="button" data-copy-message>Copiar mensagem</button>
+                <button class="mobile-button secondary" type="button" data-prepare-chat>Preparar no chat</button>
             </div>
             <div class="mobile-privacy">Privacidade: quem receber este link pode entrar na transmissao enquanto ela estiver ao vivo. Compartilhe apenas com quem deve assistir.</div>
         </div>
@@ -138,7 +205,7 @@ function openMobileWatchModal() {
     const message = mobileWatchMessage(link);
     card.querySelector(".mobile-link").value = link;
     card.querySelector("[data-copy-link]").addEventListener("click", event => copyMobileWatch(event.currentTarget, link, "Link copiado"));
-    card.querySelector("[data-copy-message]").addEventListener("click", event => copyMobileWatch(event.currentTarget, message, "Mensagem copiada"));
+    card.querySelector("[data-prepare-chat]").addEventListener("click", () => prepareMobileWatchChat(message));
     card.querySelector("[data-close]").addEventListener("click", closeMobileWatchModal);
 
     const onKey = event => {
