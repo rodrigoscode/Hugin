@@ -135,21 +135,95 @@ function parkStreamFrame(streamId = null, mine = null) {
     return false;
 }
 
+function silenceStreamFrame(entry) {
+    const frame = entry?.frame;
+    if (!frame) return null;
+
+    try {
+        frame.contentWindow?.postMessage(
+            {
+                volume: 0
+            },
+            "*"
+        );
+    } catch {}
+
+    if (entry.streamId && !entry.mine && native.setStreamGain) {
+        return native
+            .setStreamGain({
+                streamId: entry.streamId,
+                gain: 0
+            })
+            .catch(err => log("silence stream gain:", String(err)));
+    }
+
+    return null;
+}
+
+function releaseStreamFrame(entry) {
+    if (!entry) return;
+    const frame = entry.frame;
+    if (!frame || frame.dataset.huginDropping === "1") return;
+    frame.dataset.huginDropping = "1";
+
+    if (frame.isConnected && canMoveFrames()) {
+        if (!frameParking?.isConnected) {
+            frameParking = document.createElement("div");
+            frameParking.setAttribute("data-hugin-parking", "");
+            frameParking.style.cssText = "position:fixed;left:-10000px;top:0;width:1px;height:1px;overflow:hidden;pointer-events:none;";
+            document.body.appendChild(frameParking);
+        }
+
+        try {
+            frameParking.moveBefore(frame, null);
+        } catch {}
+    }
+
+    const silenced = silenceStreamFrame(entry);
+    let finished = false;
+
+    const finish = () => {
+        if (finished) return;
+        finished = true;
+
+        try {
+            frame.src = "about:blank";
+        } catch {}
+
+        frame.remove();
+    };
+
+    if (silenced?.finally) {
+        silenced.finally(finish);
+        setTimeout(finish, 250);
+    } else finish();
+}
+
 function dropStreamFrame(streamId = null, mine = null) {
     if (!streamId) {
-        streamFrame?.frame.remove();
-        for (const [key, entry] of streamFrames) {
-            if (entry === streamFrame) streamFrames.delete(key);
-        }
+        releaseStreamFrame(streamFrame);
+        for (const [key, entry] of streamFrames) if (entry === streamFrame) streamFrames.delete(key);
         setActiveStreamFrame(null);
         return;
     }
 
     const key = streamFrameKey(streamId, Boolean(mine));
     const entry = streamFrames.get(key);
-    entry?.frame.remove();
+    releaseStreamFrame(entry);
     streamFrames.delete(key);
     if (streamFrame === entry) setActiveStreamFrame(null);
+}
+
+function dropAllStreamFrames() {
+    for (const entry of streamFrames.values()) releaseStreamFrame(entry);
+    streamFrames.clear();
+    setActiveStreamFrame(null);
+    setTimeout(() => {
+        if (frameParking && frameParking.children.length === 0) {
+            frameParking.remove();
+            frameParking = null;
+        }
+    }, 300);
 }
 
 function trackStreamFrame(event) {

@@ -7,7 +7,7 @@
  */
 function closeWatchScreen(options = {}) {
     if (!watchScreen) {
-        if (!options.keepFrame) dropStreamFrame();
+        if (!options.keepFrame) dropAllStreamFrames();
         return;
     }
 
@@ -37,11 +37,13 @@ function closeWatchScreen(options = {}) {
         clearInterval(frame?.huginWatchdog);
     }
 
-    if ((watchScreen.frames?.length ?? 0) > 1) {
-        for (const frame of watchScreen.frames) dropStreamFrame(frame.dataset.huginStream, frame.dataset.huginMine === "1");
-    } else if (iframeVideo && streamFrame?.frame === iframeVideo) {
-        if (options.keepFrame) parkStreamFrame();
-        else dropStreamFrame();
+    const frames = watchScreen.frames ?? (iframeVideo ? [iframeVideo] : []);
+
+    if (options.keepFrame && frames.length === 1) {
+        const frame = frames[0];
+        parkStreamFrame(frame.dataset.huginStream, frame.dataset.huginMine === "1");
+    } else {
+        for (const frame of frames) dropStreamFrame(frame.dataset.huginStream, frame.dataset.huginMine === "1");
     }
 
     watchScreen.node.remove();
