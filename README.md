@@ -22,6 +22,7 @@ Transmita sua tela ao vivo para os amigos que estão no mesmo servidor do Discor
 - **Áudio sem eco.** Transmitindo uma janela, só o som daquele aplicativo vai junto. Transmitindo a tela inteira, vai todo o som do PC menos o do Discord: as vozes da call, os sons de entrar, sair e mutar e as transmissões que você está assistindo ficam de fora. Dá para ligar e desligar o áudio no ar.
 - **Ao Vivo no servidor todo.** O selo "Ao Vivo" aparece em quem está transmitindo em qualquer call do servidor. Passe o mouse para ver a prévia e clique para entrar na call e assistir.
 - **Assistir como no Discord.** Prévia junto dos cards de atividade, palco com tela cheia, zoom com minimapa, janela flutuante (PiP) quando você sai da tela da call e volume até 200%.
+- **Link para assistir no celular.** Quem está transmitindo pode abrir o menu da transmissão, copiar um link ou preparar uma mensagem no chat para alguém assistir pelo navegador do celular via VDO.Ninja.
 - **Sem configuração.** Quem entra no mesmo canal de voz com o Hugin cai automaticamente na mesma sala, protegida por senha derivada do canal.
 
 ## Como usar
@@ -30,6 +31,7 @@ Transmita sua tela ao vivo para os amigos que estão no mesmo servidor do Discor
 2. Dê dois cliques. Ele fecha o Discord, instala e abre o Discord de novo.
 3. Entre numa call de voz e clique no botão de compartilhar tela.
 4. Seus amigos precisam ter o Hugin instalado também. Eles veem o "Ao Vivo" no seu nome e clicam para assistir.
+5. Para alguém assistir no celular, abra o menu da transmissão e clique em **Assistir no celular**. O link abre no navegador e dá acesso direto à sua transmissão enquanto ela estiver ao vivo.
 
 Quando o Discord se atualizar, o Hugin pode sair junto. Basta abrir o `Hugin.exe` de novo.
 
@@ -39,12 +41,13 @@ Se o Windows mostrar o aviso "O Windows protegeu o computador", clique em **Mais
 
 - Windows 10 ou 11.
 - Discord para desktop (Estável, PTB ou Canary).
-- Todo mundo que vai assistir precisa do Hugin.
+- Para assistir dentro do Discord, todo mundo precisa do Hugin. No celular, basta abrir o link compartilhado no navegador.
 - Para o áudio separado (só o aplicativo na janela, tudo menos o Discord na tela inteira), Windows 11. No Windows 10 a transmissão leva o som do PC inteiro, Discord incluído.
 
 ## Privacidade e riscos
 
 - O vídeo e o áudio vão por WebRTC direto entre os participantes. A conexão é intermediada pelo VDO.Ninja, que ajuda os PCs a se encontrarem.
+- O link de celular contém o acesso à sala da transmissão. Quem receber o link pode assistir enquanto ela estiver ao vivo; compartilhe só com quem deve entrar.
 - Para mostrar o nome e a foto de quem está transmitindo, o Hugin lê as respostas que o próprio Discord já recebe e pode pedir perfis à API do Discord usando a sua sessão. Para desligar esses pedidos, coloque `"fetchOwnProfile": false` e `"fetchProfiles": false` no `config.json`.
 - **Modificar o cliente do Discord vai contra os Termos de Serviço do Discord.** Use por sua conta e risco.
 
