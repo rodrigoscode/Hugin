@@ -24,6 +24,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Bundle payload
+        run: go run ./tools/bundle
+
       - name: Test Go packages
         run: go test ./...
 
