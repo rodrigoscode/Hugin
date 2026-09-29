@@ -10,7 +10,7 @@
 
 Transmita sua tela ao vivo para os amigos que estão no mesmo servidor do Discord, em alta qualidade, com o vídeo indo direto do seu PC para o deles.
 
-> Este fork é mantido em https://github.com/rodrigoscode/Hugin depois que o repositório original deixou de estar disponível.
+> Projeto iniciado por Leandro e continuado aqui.
 
 <p align="center">
   <img src="assets/demo.gif" width="880" alt="O botão de compartilhar tela abre o seletor do Hugin, a transmissão começa, o selo Ao Vivo aparece com a prévia e o palco mostra a tela.">
