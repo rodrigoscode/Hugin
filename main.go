@@ -35,6 +35,8 @@ func run() (code int) {
 		code = cli.RunUninstall(opts)
 	case cliui.CommandStatus:
 		code = cli.RunStatus()
+	case cliui.CommandDoctor:
+		code = cli.RunDoctor()
 	default:
 		code = cli.RunHelp()
 	}

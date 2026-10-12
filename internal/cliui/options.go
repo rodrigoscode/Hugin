@@ -8,6 +8,7 @@ const (
 	CommandInstall   Command = "install"
 	CommandUninstall Command = "uninstall"
 	CommandStatus    Command = "status"
+	CommandDoctor    Command = "doctor"
 	CommandHelp      Command = "help"
 )
 
@@ -16,6 +17,7 @@ var commandAliases = map[string]Command{
 	"uninstall": CommandUninstall,
 	"remove":    CommandUninstall,
 	"status":    CommandStatus,
+	"doctor":    CommandDoctor,
 	"help":      CommandHelp,
 }
 

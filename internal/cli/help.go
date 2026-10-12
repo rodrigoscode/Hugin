@@ -17,6 +17,7 @@ const helpBody = `
     install      inject the patch (default)
     uninstall    restore the original app.asar
     status       report state without changing anything
+    doctor       run read-only health checks
 
   General options:
     --branch=stable|ptb|canary|development   pick a branch
