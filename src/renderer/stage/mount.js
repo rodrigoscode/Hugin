@@ -254,9 +254,7 @@ function openWatchChoiceMenu(item, current) {
 }
 
 function hasCallScreen(page) {
-    return [...(page?.querySelectorAll('[class*="callContainer_cb9592"]') ?? [])].some(
-        el => !el.closest("[" + WATCH_SCREEN_MARK + "]")
-    );
+    return Boolean(nativeCallContainer(page));
 }
 
 function callLink() {
@@ -339,7 +337,6 @@ function mountWatchScreen(item) {
     shell.innerHTML = CAPTURED_WATCH_HTML;
     const node = shell.firstElementChild;
     node.setAttribute(WATCH_SCREEN_MARK, "");
-    const overCallScreen = hasCallScreen(page);
     if (!primaryItem.mine) swapDisconnectForStopWatching(node);
 
     dropWatchControls(node, {
@@ -412,13 +409,8 @@ function mountWatchScreen(item) {
         if (/Nitro/.test(hidden.textContent)) hidden.textContent = "Qualidade da transmissão";
     }
 
-    const nativeCallScreen = overCallScreen
-        ? [...page.children].find(
-              el => !el.hasAttribute(WATCH_SCREEN_MARK) && el.querySelector('[class*="callContainer_cb9592"]')
-          )
-        : null;
-
-    const hostElement = nativeCallScreen?.querySelector('[class*="callContainer_cb9592"]') || null;
+    const hostElement = nativeCallContainer(page);
+    const nativeCallScreen = hostElement?.parentElement?.closest('[class*="wrapper_"]') ?? hostElement;
     let hidden = [];
 
     if (hostElement) {
@@ -470,12 +462,12 @@ function mountWatchScreen(item) {
         });
 
     let chatObserver = null;
-    const nativeWrapper = nativeCallScreen?.querySelector('[class*="wrapper_cb9592"]');
+    const nativeWrapper = nativeCallScreen;
     const ourChatButton = node.querySelector('[class*="chatIcon__"]')?.closest("button, [role='button']");
 
     if (nativeWrapper && ourChatButton) {
         const reflectChat = () => {
-            const isOpen = /sidebarOpen_cb9592/.test(nativeWrapper.getAttribute("class") || "");
+            const isOpen = [...nativeWrapper.classList].some(name => name.startsWith("sidebarOpen_"));
             ourChatButton.style.display = isOpen ? "none" : "";
         };
         reflectChat();

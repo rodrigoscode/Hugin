@@ -1,0 +1,113 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Hugin stage DOM regression tests</title>
+<style>
+    #fixture { width: 1000px; height: 700px; }
+    #fixture > div, #fixture main, #fixture section { width: 100%; height: 100%; }
+</style>
+<div id="fixture"></div>
+<pre id="result" data-status="running">Running</pre>
+<script src="../src/renderer/captures/stage.capture.js"></script>
+<script src="../src/renderer/stage/watch-screen.js"></script>
+<script src="../src/renderer/stage/mount.js"></script>
+<script>
+    // Exercise real DOM selection, stage mounting, CSS hiding and teardown. Media/IPC are isolated.
+    const native = { overlay: () => Promise.resolve() };
+    const state = {
+        userId: "123", userName: "Test", channelName: "Voice", avatarUrl: "",
+        streams: new Map(), resolution: "1080", fps: "60"
+    };
+    const CAPTURED_VOLUME_CSS = "";
+    const CAPTURED_ZOOM_CSS = "";
+    const PARKED_STAGE_FRAME_MS = 1000;
+    let stageTooltips = null, stageView = null, streamMenu = null, stageMenu = null;
+    const logs = [];
+    const log = (...args) => logs.push(args.join(" "));
+    const fixture = document.getElementById("fixture");
+    const result = document.getElementById("result");
+    const passed = [];
+    const assert = (condition, message) => { if (!condition) throw new Error(message); };
+    const noop = () => {};
+    const closeLivePreview = noop, closePip = noop, closeStageMenu = noop;
+    const dropAllStreamFrames = noop, dropStreamFrame = noop, syncViewBounds = noop;
+    const bindStageMenu = noop, releaseFocusAfterClick = noop, leftStage = noop;
+    const parkStreamFrame = noop;
+    const streamIdOf = item => item.key;
+    const streamOwner = () => "456";
+    const avatarFor = () => "";
+    const heightLabel = height => height;
+    const bindFullscreen = () => noop;
+    const bindStageZoom = () => noop;
+    const voiceChannelId = () => "111:222";
+    const streamers = () => [];
+    mountWatchVolume = () => null;
+    mountWatchVideo = node => {
+        const parent = node.querySelector('[class*="videoSizer_"]');
+        assert(parent, "Captured stage must contain the video slot");
+        const frame = document.createElement("iframe");
+        frame.dataset.huginStream = "test";
+        parent.appendChild(frame);
+        return { frame, playing: true, slot: { parent, ref: null } };
+    };
+
+    function reset(markup) {
+        closeWatchScreen();
+        fixture.innerHTML = markup;
+        logs.length = 0;
+    }
+
+    async function tests() {
+        for (const [pageSuffix, callSuffix] of [["_5e434", "cb9592"], ["New123", "AbC-12"], ["_Other", "_Other"]]) {
+            reset(`<div class="page_${pageSuffix}"><section class="wrapper_${callSuffix}"><main class="callContainer_${callSuffix}"><div id="native-grid">Call grid</div></main></section></div>`);
+            const page = fixture.firstElementChild;
+            const call = page.querySelector("main");
+            assert(chatPage() === page, "Page lookup failed: " + pageSuffix);
+            assert(nativeCallContainer(page) === call, "Call lookup failed: " + callSuffix);
+            assert(hasCallScreen(page), "Native call was not detected");
+            openWatchScreen({ key: "own", mine: true });
+            assert(watchScreen?.node.parentElement === call, "Stage did not mount in native call");
+            assert(watchScreen.frame?.isConnected, "Video iframe did not mount");
+            assert(getComputedStyle(document.getElementById("native-grid")).display === "none", "Native grid covers stage");
+            assert(nativeCallContainer(page) === call, "Captured stage was mistaken for native call");
+
+            const button = watchScreen.node.querySelector('[class*="chatIcon__"]')?.closest("button, [role='button']");
+            assert(button, "Captured chat button is missing");
+            call.parentElement.classList.add("sidebarOpen_" + callSuffix);
+            await Promise.resolve();
+            assert(button.style.display === "none", "Chat-open state was not reflected");
+            call.parentElement.classList.remove("sidebarOpen_" + callSuffix);
+            await Promise.resolve();
+            assert(button.style.display === "", "Chat button was not restored");
+
+            closeWatchScreen();
+            assert(!call.hasAttribute("data-hugin-host"), "Host marker leaked after close");
+            assert(getComputedStyle(document.getElementById("native-grid")).display !== "none", "Native grid did not return");
+            passed.push("Mount, video slot, chat and close: " + pageSuffix + "/" + callSuffix);
+        }
+
+        reset('<div class="page_New123"><div id="chat" style="display:flex">Chat page</div></div>');
+        const page = chatPage();
+        mountWatchScreen({ key: "own", mine: true });
+        assert(watchScreen?.node.parentElement === page, "Fallback page mount failed");
+        assert(!hasCallScreen(page), "Our captured stage must not count as a native call");
+        assert(document.getElementById("chat").style.display === "none", "Fallback chat was not hidden");
+        closeWatchScreen();
+        assert(document.getElementById("chat").style.display === "flex", "Fallback display was not restored");
+        passed.push("Non-call page fallback and captured-stage exclusion");
+
+        reset('<div class="homepage_Decoy"></div>');
+        assert(chatPage() === null, "Unrelated page-like class was selected");
+        mountWatchScreen({ key: "own", mine: true });
+        assert(!watchScreen, "Missing page must not mount outside Discord content");
+        assert(logs.some(line => line.includes("chat area not found")), "Missing-page diagnostic was lost");
+        passed.push("Missing-page diagnostic and unrelated-class exclusion");
+    }
+
+    tests().then(() => {
+        result.dataset.status = "pass";
+        result.textContent = passed.join("\n") + "\nPASS: " + passed.length + " scenarios";
+    }).catch(error => {
+        result.dataset.status = "fail";
+        result.textContent = error.stack;
+    }).finally(() => closeWatchScreen());
+</script>

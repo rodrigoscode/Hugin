@@ -2,12 +2,9 @@
  * LIVE badges on voice rows, and which Discord user owns each stream.
  */
 
-const LIVE_BADGE_CLASS =
-    "eyebrow_cf4812 live_a7acae liveSmall_a7acae textBadge__463b7 base__463b7 liveShapeRound_a7acae";
-
-const ICONS_CLASS = "icons__07f91";
-const ICON_GROUP_CLASS = "iconGroup__07f91";
-const VOICE_ROW_SELECTOR = '[class*="content__07f91"]';
+// Discord's CSS-module suffixes change between builds (including single/double underscores).
+// Scope the semantic content prefix to voice users so unrelated content is never treated as a row.
+const VOICE_ROW_SELECTOR = '[class*="voiceUser_"] [class*="content_"], [class*="content__07f91"]';
 const BADGE_MARK = "data-hugin-live";
 let hoveredVoiceRow = null;
 
@@ -75,23 +72,28 @@ function syncLiveBadges() {
         if (row.querySelector(`[${BADGE_MARK}]`)) continue;
         const native = row.querySelector(`[class*="live_"]:not([${BADGE_MARK}])`);
         if (native) continue;
-        let icons = row.querySelector(`[class*="icons__"]`);
+        let icons = row.querySelector('[class*="icons_"], [data-hugin-live-icons]');
         if (!icons) {
             icons = document.createElement("div");
-            icons.className = ICONS_CLASS;
+            icons.setAttribute("data-hugin-live-icons", "");
+            icons.style.cssText = "display:flex;align-items:center;gap:4px;margin-inline-start:auto;flex-shrink:0";
             row.appendChild(icons);
         }
-        let group = icons.querySelector(`[class*="iconGroup__"]`);
+        let group = icons.querySelector('[class*="iconGroup_"], [data-hugin-live-group]');
         if (!group) {
             group = document.createElement("div");
-            group.className = ICON_GROUP_CLASS;
+            group.setAttribute("data-hugin-live-group", "");
+            group.style.cssText = "display:flex;align-items:center;gap:4px";
             icons.appendChild(group);
         }
         const badge = document.createElement("div");
-        badge.className = LIVE_BADGE_CLASS;
         badge.setAttribute("data-text-variant", "eyebrow");
         badge.setAttribute(BADGE_MARK, userId);
-        badge.style.backgroundColor = "var(--red-400)";
+        badge.style.cssText =
+            "display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;" +
+            "height:16px;padding:0 4px;border-radius:4px;background:var(--status-danger,#da373c);" +
+            "color:#fff;font-family:var(--font-primary,'gg sans',sans-serif);font-size:10px;" +
+            "font-weight:700;line-height:16px;text-transform:uppercase;white-space:nowrap";
         badge.textContent = "Ao Vivo";
         group.appendChild(badge);
     }

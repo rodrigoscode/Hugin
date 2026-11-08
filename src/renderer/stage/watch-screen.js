@@ -6,7 +6,19 @@ const WATCH_SCREEN_MARK = "data-hugin-watch-screen";
 let watchScreen = null;
 
 function chatPage() {
-    return document.querySelector('[class*="page__5e434"]');
+    return [...document.querySelectorAll('[class^="page_"], [class*=" page_"]')].find(
+        page => !page.closest(`[${WATCH_SCREEN_MARK}]`)
+    ) ?? null;
+}
+
+/**
+ * Only native call containers count: our captured stage contains its own copy of that markup.
+ * Match the module's semantic prefix, since Discord changes its suffix between client builds.
+ */
+function nativeCallContainer(page) {
+    return [...(page?.querySelectorAll('[class*="callContainer_"]') ?? [])].find(
+        container => !container.closest(`[${WATCH_SCREEN_MARK}]`)
+    ) ?? null;
 }
 
 const WATCH_STYLE_ID = "hugin-watch-style";
