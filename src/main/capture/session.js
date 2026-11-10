@@ -3,41 +3,8 @@
  */
 
 /**
- * Takes the viewer beacon off the screen before a broadcast captures it. Chromium shares one capture
- * device per source, sized by whoever opened it first, and the beacon captures at 2 px.
- */
-async function pauseBeacon() {
-    const win = views.get("identify");
-    if (!win || win.isDestroyed()) return null;
-    const url = win.webContents.getURL();
-    if (!/^https?:/.test(url)) return null;
-
-    try {
-        await win.webContents.loadURL("about:blank");
-    } catch (err) {
-        log("beacon: could not pause:", String(err));
-        return null;
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 400));
-    log("beacon: paused so the broadcast opens the screen first");
-
-    return () =>
-        setTimeout(() => {
-            if (win.isDestroyed() || views.get("identify") !== win) return;
-
-            win.webContents
-                .loadURL(url, {
-                    userAgent: CHROME_UA
-                })
-                .then(() => log("beacon: resumed after the screen"))
-                .catch(err => log("beacon: could not resume:", String(err)));
-        }, 2500);
-}
-
-/**
- * The shared VDO.Ninja session. Display capture goes to the broadcast's chosen source and the viewer
- * beacon's screen; the lobby announcement fakes its own video and is refused a real source. A shared
+ * The shared VDO.Ninja session. Only the broadcast opens a real capture device; identity publishers
+ * supply synthetic video in their preload. A shared
  * window brings its application's audio; a whole screen brings Hugin.exe's system audio without
  * Discord, or the full system mix where Windows lacks process loopback.
  */
@@ -56,54 +23,34 @@ function prepareSession() {
 
     const handler = async (request, callback) => {
         const role = roleForWebContents(request.frame);
-        if (role === "announce") return callback({});
-
-        if (role === "identify") {
-            try {
-                const sources = await electron.desktopCapturer.getSources({
-                    types: ["screen"]
-                });
-                if (!sources[0]) return callback({});
-                return callback({
-                    video: sources[0]
-                });
-            } catch (err) {
-                log("beacon: failed to resolve source:", String(err));
-                return callback({});
-            }
-        }
-
+        if (role !== "broadcast") return callback({});
         if (!pending?.sourceId) return callback({});
-        let resumeBeacon = null;
 
         try {
             const sources = await electron.desktopCapturer.getSources({
-                types: ["screen", "window"]
+                types: [pending.sourceId.startsWith("screen:") ? "screen" : "window"],
+                thumbnailSize: { width: 0, height: 0 },
+                fetchWindowIcons: false
             });
-            const source = sources.find(s => s.id === pending.sourceId) ?? sources[0];
+            const source = sources.find(s => s.id === pending.sourceId);
             if (!source) return callback({});
             log("handing source to getDisplayMedia:", source.name);
             watchSharedWindow(source.id);
-            if (source.id.startsWith("screen:")) resumeBeacon = await pauseBeacon();
-            const deliver = response => {
-                callback(response);
-                resumeBeacon?.();
-            };
             if (!pending.audio)
-                return deliver({
+                return callback({
                     video: source
                 });
             const owner = await windowOwner(source.id);
             if (owner && owner.name.toLowerCase() === "explorer.exe") {
                 log("broadcast audio: none (explorer.exe window)");
-                return deliver({
+                return callback({
                     video: source
                 });
             }
             if (!owner && pending.systemAudio) {
                 const started = startSystemAudio(electron.webContents.fromFrame(request.frame));
                 log("broadcast audio:", started ? "system audio without Discord (Hugin.exe)" : "none (Hugin.exe missing)");
-                return deliver({
+                return callback({
                     video: source
                 });
             }
@@ -111,14 +58,13 @@ function prepareSession() {
             const windowAudio = processLoopbackSupported() ? `applicationLoopback:${owner?.pid}` : "loopback";
             const audio = owner ? windowAudio : "loopback";
             log("broadcast audio:", audio, owner?.name ? "(" + owner.name + ")" : "");
-            deliver({
+            callback({
                 video: source,
                 audio
             });
         } catch (err) {
             log("failed to resolve source:", String(err));
             callback({});
-            resumeBeacon?.();
         }
     };
 

@@ -24,8 +24,8 @@ function inMainWorld(func) {
 }
 
 /**
- * Replaces display capture with a 4x2 canvas, so the lobby announcement never opens a capture device
- * (a 2 px capture would size the device a real broadcast shares).
+ * Replaces display capture with a 4x2 canvas for identity-only publishers. Opening even a tiny real
+ * screen capture shares Chromium's capture device with the broadcast and can change its constraints.
  */
 function fakeDisplayMedia() {
     const fake = async () => {
@@ -58,7 +58,7 @@ function readLobbyPeers() {
     return peers;
 }
 
-if (ROLE === "announce") inMainWorld(fakeDisplayMedia).catch(() => {});
+if (ROLE === "announce" || ROLE === "identify") inMainWorld(fakeDisplayMedia).catch(() => {});
 
 /**
  * Marks the broadcast's screen capture as motion. An unmarked screen track keeps its resolution and drops

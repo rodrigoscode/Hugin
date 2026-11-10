@@ -5,7 +5,7 @@
 let beaconActive = false;
 
 /**
- * Publishes the viewer beacon (our identity, no real video) while in a room where someone is live, or
+ * Publishes the viewer beacon (our identity over a synthetic video) while someone is live, or
  * while broadcasting.
  */
 async function syncBeacon() {
