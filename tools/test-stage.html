@@ -10,6 +10,7 @@
 <script src="../src/renderer/captures/stage.capture.js"></script>
 <script src="../src/renderer/stage/watch-screen.js"></script>
 <script src="../src/renderer/stage/mount.js"></script>
+<script src="../src/renderer/stage/fullscreen.js"></script>
 <script>
     // Exercise real DOM selection, stage mounting, CSS hiding and teardown. Media/IPC are isolated.
     const native = { overlay: () => Promise.resolve() };
@@ -20,7 +21,7 @@
     const CAPTURED_VOLUME_CSS = "";
     const CAPTURED_ZOOM_CSS = "";
     const PARKED_STAGE_FRAME_MS = 1000;
-    let stageTooltips = null, stageView = null, streamMenu = null, stageMenu = null;
+    let stageView = null, streamMenu = null, stageMenu = null;
     const logs = [];
     const log = (...args) => logs.push(args.join(" "));
     const fixture = document.getElementById("fixture");
@@ -36,7 +37,7 @@
     const streamOwner = () => "456";
     const avatarFor = () => "";
     const heightLabel = height => height;
-    const bindFullscreen = () => noop;
+    createStageTooltip = noop;
     const bindStageZoom = () => noop;
     const voiceChannelId = () => "111:222";
     const streamers = () => [];
@@ -101,6 +102,61 @@
         assert(!watchScreen, "Missing page must not mount outside Discord content");
         assert(logs.some(line => line.includes("chat area not found")), "Missing-page diagnostic was lost");
         passed.push("Missing-page diagnostic and unrelated-class exclusion");
+
+        // Simulate the Fullscreen API while keeping real DOM layout and event handling.
+        // Stale inline bounds and renamed native classes reproduce Discord client updates.
+        let fullscreen = null;
+        Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreen });
+        document.exitFullscreen = async () => {
+            fullscreen = null;
+            document.dispatchEvent(new Event("fullscreenchange"));
+        };
+        for (const suffix of ["cb9592", "Updated123"]) {
+            reset(`<div id="app-mount"><div class="base_Updated"><aside class="sidebar_Updated">Servers</aside><div class="page_Updated"><section class="wrapper_${suffix}" style="width:800px;height:480px"><main class="callContainer_${suffix}"><div>Native call</div></main></section></div><section class="theme-dark panels_${suffix}" style="display:flex;position:fixed;left:0;bottom:0;width:300px;height:160px;z-index:10">Voice Connected / User</section></div></div>`);
+            const app = document.getElementById("app-mount");
+            const call = fixture.querySelector("section");
+            const sidebar = fixture.querySelector("aside");
+            const panels = fixture.querySelector('[class*="panels_"]');
+            assert(getComputedStyle(panels).display === "flex", "Voice panel must initially be visible");
+            app.requestFullscreen = async () => {
+                fullscreen = app;
+                document.dispatchEvent(new Event("fullscreenchange"));
+            };
+            openWatchScreen({ key: "own", mine: true });
+            const node = watchScreen.node;
+            const frame = watchScreen.frame;
+            node.dataset.huginAspect = String(16 / 9);
+            const button = node.querySelector('button[aria-label="Tela cheia"]');
+            button.click();
+            assert(fullscreen === app, "Fullscreen did not target the app: " + suffix);
+            fitWatchStage(node);
+            const area = node.querySelector('[class*="root__6981d"]').getBoundingClientRect();
+            assert(Math.abs(area.height - innerHeight) <= 1 && Math.abs(area.width - innerWidth) <= 1,
+                `Fullscreen retained old stage bounds (${area.width}x${area.height}, viewport ${innerWidth}x${innerHeight}): ${suffix}`);
+            const sizer = node.querySelector('[class*="videoSizer_a21736"]').getBoundingClientRect();
+            assert(Math.abs(sizer.width - Math.min(innerWidth, innerHeight * 16 / 9)) <= 2, "Fullscreen video did not grow");
+            assert(button.getAttribute("aria-label") === "Sair da tela cheia", "Fullscreen button state missing");
+            assert(sidebar.hidden, "Fullscreen sidebar was not hidden");
+            assert(getComputedStyle(panels).display === "none", "Voice/user panel overlays fullscreen video: " + suffix);
+            const remountedPanels = panels.cloneNode(true);
+            panels.after(remountedPanels);
+            assert(getComputedStyle(remountedPanels).display === "none", "Remounted voice/user panel escaped fullscreen rule");
+            assert(watchScreen.frame === frame && frame.isConnected, "Fullscreen replaced the playing iframe");
+            await document.exitFullscreen();
+            assert(call.getBoundingClientRect().height === 480, "Native call height was not restored");
+            assert(button.getAttribute("aria-label") === "Tela cheia", "Fullscreen button was not restored");
+            assert(!sidebar.hidden, "Sidebar visibility was not restored");
+            assert(getComputedStyle(panels).display === "flex", "Voice/user panel was not restored after exit");
+            assert(getComputedStyle(remountedPanels).display === "flex", "Remounted panel was not restored after exit");
+            assert(!app.hasAttribute("data-hugin-fullscreen-app"), "Fullscreen app marker leaked after exit");
+            button.click();
+            closeWatchScreen();
+            assert(fullscreen === null, "Closing the stage did not exit fullscreen");
+            assert(call.getBoundingClientRect().height === 480, "Closing fullscreen left modified call bounds");
+            assert(getComputedStyle(panels).display === "flex", "Closing fullscreen left the voice/user panel hidden");
+            assert(!app.hasAttribute("data-hugin-fullscreen-app"), "Fullscreen app marker leaked after close");
+            passed.push("Fullscreen resize, exit and teardown: " + suffix);
+        }
     }
 
     tests().then(() => {

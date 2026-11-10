@@ -45,6 +45,10 @@ function ensureWatchStyle() {
         ".full-motion [data-hugin-watch-screen] .minimapIndicator__07fe9::after { transition: var(--custom-zoom-indicator-transition); }" +
         ".full-motion [data-hugin-watch-screen] .videoContainer__1505a.zoomed__1505a { transition: var(--custom-zoom-transition); }" +
         "[data-hugin-host] > :not([data-hugin-watch-screen]) { display: none !important; }" +
+        "[data-hugin-fullscreen-app] :is([class^='panels_'], [class*=' panels_']) { display:none !important; }" +
+        "[data-hugin-fullscreen-call] { position:fixed !important; inset:0 !important; width:100vw !important; height:100vh !important; max-width:none !important; max-height:none !important; margin:0 !important; z-index:2; }" +
+        "[data-hugin-watch-screen][data-hugin-fullscreen] { height:100% !important; max-height:none !important; }" +
+        "[data-hugin-watch-screen] > .callContainer_cb9592 { height:100%; min-height:0; min-width:0; }" +
         "html [data-hugin-watch-screen] .root_bfe55a.idle_bfe55a:not(:focus-within) .topControls_bfe55a { opacity: 0; transform: translate3d(0px, -8px, 0px); }" +
         "html [data-hugin-watch-screen] .root_bfe55a.idle_bfe55a:not(:focus-within) .bottomControls_bfe55a { opacity: 0; transform: translate3d(0px, 8px, 0px); }" +
         "html [data-hugin-watch-screen] .root_bfe55a.idle_bfe55a:not(:focus-within) .gradientContainer_bfe55a { opacity: 0; }" +

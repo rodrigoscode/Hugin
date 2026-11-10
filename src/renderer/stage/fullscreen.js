@@ -31,7 +31,7 @@ function moveLayersTo(destination) {
 /**
  * Wires the stage's fullscreen button and double click to browser fullscreen. Over Discord's call screen
  * it does what Discord's own fullscreen does: the whole app goes fullscreen, the app base drops its title
- * bar and hides the sidebar, and the call view fills the screen, so the chat and popouts rendered outside
+ * bar and hides the sidebar and voice/user panel, and the call view fills the screen, so the chat and popouts rendered outside
  * the call view stay visible.
  */
 function bindFullscreen(node) {
@@ -40,8 +40,8 @@ function bindFullscreen(node) {
     const enterIcon = icon?.innerHTML ?? "";
     const container = node.querySelector('[class*="callContainer_cb9592"]');
     const hadNoChat = node.classList.contains("noChat_cb9592");
-    const callView = node.parentElement?.closest('[class*="wrapper_cb9592"]') ?? null;
-    const callContainer = node.parentElement?.closest('[class*="callContainer_cb9592"]') ?? null;
+    const callContainer = node.parentElement?.closest('[class*="callContainer_"]') ?? null;
+    const callView = callContainer?.parentElement?.closest('[class*="wrapper_"]') ?? null;
     const target = (callView && document.getElementById("app-mount")) || node;
     let saved = null;
 
@@ -49,27 +49,28 @@ function bindFullscreen(node) {
         if (!callView) return;
 
         if (on && !saved) {
-            const base = callView.closest('[class*="base__5e434"]');
-            const sidebar = base?.querySelector('[class*="sidebar__5e434"]');
+            const base = callView.closest('[class*="base_"]');
+            const sidebar = base?.querySelector('[class*="sidebar_"]');
 
             saved = {
                 base,
                 sidebar,
                 attribute: base?.getAttribute("data-fullscreen") ?? null,
-                sidebarHidden: sidebar?.classList.contains("hidden__5e434") ?? false
+                sidebarHidden: sidebar?.hidden ?? false
             };
 
             base?.setAttribute("data-fullscreen", "true");
-            sidebar?.classList.add("hidden__5e434");
+            if (sidebar) sidebar.hidden = true;
         } else if (!on && saved) {
             if (saved.attribute === null) saved.base?.removeAttribute("data-fullscreen");
             else saved.base?.setAttribute("data-fullscreen", saved.attribute);
-            if (!saved.sidebarHidden) saved.sidebar?.classList.remove("hidden__5e434");
+            if (saved.sidebar) saved.sidebar.hidden = saved.sidebarHidden;
             saved = null;
         }
 
         callView.classList.toggle("fullScreen_cb9592", on);
         callContainer?.classList.toggle("fullScreen_cb9592", on);
+        callView.toggleAttribute("data-hugin-fullscreen-call", on);
     };
 
     const toggle = () => {
@@ -82,10 +83,13 @@ function bindFullscreen(node) {
 
     const reflect = () => {
         const isFullscreen = document.fullscreenElement === target;
+        target.toggleAttribute("data-hugin-fullscreen-app", isFullscreen);
         node.classList.toggle("fullScreen_cb9592", isFullscreen);
         if (hadNoChat) node.classList.toggle("noChat_cb9592", !isFullscreen);
         container?.classList.toggle("fullScreen_cb9592", isFullscreen);
         setAppFullscreen(isFullscreen);
+        node.toggleAttribute("data-hugin-fullscreen", isFullscreen);
+        fitWatchStage(node);
         button?.setAttribute("aria-label", isFullscreen ? "Sair da tela cheia" : "Tela cheia");
         if (icon) icon.innerHTML = isFullscreen ? EXIT_FULLSCREEN_ICON : enterIcon;
         moveLayersTo(document.fullscreenElement ?? document.body);
@@ -110,7 +114,9 @@ function bindFullscreen(node) {
 
     return () => {
         document.removeEventListener("fullscreenchange", reflect);
+        target.removeAttribute("data-hugin-fullscreen-app");
         setAppFullscreen(false);
+        node.removeAttribute("data-hugin-fullscreen");
         if (document.fullscreenElement !== target) return;
         moveLayersTo(document.body);
         document.exitFullscreen().catch(() => {});
