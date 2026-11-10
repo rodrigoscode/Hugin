@@ -27,6 +27,9 @@ Transmita sua tela ao vivo para os amigos que estão no mesmo servidor do Discor
 - **Link para assistir no celular.** Quem está transmitindo pode abrir o menu da transmissão, copiar um link ou preparar uma mensagem no chat para alguém assistir pelo navegador do celular via VDO.Ninja.
 - **Sem configuração.** Quem entra no mesmo canal de voz com o Hugin cai automaticamente na mesma sala, protegida por senha derivada do canal.
 
+> <img width="274" height="200" alt="{101346FF-A30E-4467-B866-525906399FF3}" src="https://github.com/user-attachments/assets/7b07ce55-a7ff-4062-ade0-8c10a7f94fb8" />
+
+
 ## Como usar
 
 1. Baixe o `Hugin.exe` na [última release](https://github.com/rodrigoscode/Hugin/releases/latest).
