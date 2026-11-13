@@ -82,22 +82,24 @@ function scopeWatchCss(css) {
 }
 
 function wireWatchControls(node) {
-    const stop = node.querySelector('[aria-label="Parar de transmitir"]');
+    const button = node.querySelector('[aria-label="Parar de transmitir"]');
+    if (!button) return;
 
-    stop?.addEventListener("click", event => {
+    // The captured stage has a split stop/menu control. Keep one management button,
+    // owned by the stage rather than the scanner that replaces native Discord buttons.
+    const container = button.closest('[class*="attachedCaretButtonContainer_"]');
+    for (const caret of container?.querySelectorAll('[class*="contextMenuNub_"], [class*="attachedCaret_"]') ?? []) {
+        if (caret !== button && !caret.contains(button)) caret.remove();
+    }
+    button.setAttribute("data-hugin-stage-share", "");
+    button.setAttribute("aria-label", "Gerenciar transmissão");
+    button.title = "Gerenciar transmissão";
+    button.style.borderRadius = "8px";
+    button.innerHTML = ICON.discordStopShare(20);
+    button.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
-        stopBroadcast().catch(err => log("stopBroadcast:", err));
-    });
-
-    const caret =
-        node.querySelector('[class*="contextMenuNub_"][class*="greenGlow"]') ??
-        node.querySelector('[class*="attachedCaret_"]');
-
-    caret?.addEventListener("click", event => {
-        event.preventDefault();
-        event.stopPropagation();
-        openStreamMenu(caret);
+        if (state.broadcasting) openStreamMenu(button);
     });
 }
 
@@ -126,7 +128,7 @@ function swapDisconnectForStopWatching(node) {
  * stream, even while you broadcast.
  */
 function dropBroadcastButton(node) {
-    const stop = node.querySelector('button[aria-label="Parar de transmitir"]');
+    const stop = node.querySelector('[data-hugin-stage-share], button[aria-label="Parar de transmitir"]');
     const broadcastBlock = stop?.closest('[class*="attachedCaretButtonContainer_"]')?.parentElement?.parentElement;
     if (!broadcastBlock) return;
     const section = broadcastBlock.closest('[class*="buttonSection__"]');

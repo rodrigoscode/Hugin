@@ -46,6 +46,7 @@ function replaceShareButton(original) {
 
     if (original.__huginReplaced && existing) {
         drawIcon(existing);
+        original.style.display = "none";
         return;
     }
 
@@ -208,13 +209,13 @@ function accessibleName(element) {
 }
 
 function isShareButton(element) {
-    if (element.closest(CHAT_CONTENT_SELECTOR)) return false;
+    if (element.closest(`${CHAT_CONTENT_SELECTOR}, [data-hugin-watch-screen]`)) return false;
     const name = accessibleName(element).trim();
     return name.length <= 40 && SHARE_LABELS.some(rx => rx.test(name));
 }
 
 function takeShareButton(element) {
-    if (element.hasAttribute("data-hugin-btn")) return;
+    if (element.matches("[data-hugin-btn], [data-hugin-call-share]") || element.closest("[data-hugin-watch-screen]")) return;
 
     if (config.replaceShareButton) replaceShareButton(element);
     else hijackShare(element);
@@ -226,7 +227,7 @@ function takeShareButton(element) {
  */
 function syncCallShareButton() {
     for (const controls of document.querySelectorAll('[class*="centerControls"]')) {
-        if (controls.closest("[data-hugin]")) continue;
+        if (controls.closest("[data-hugin], [data-hugin-watch-screen]")) continue;
         let button = controls.querySelector("[data-hugin-call-share]");
         if (!state.channelId) {
             button?.remove();
@@ -305,6 +306,14 @@ function syncCallShareButton() {
 function scanShareButton() {
     logPanelLabels();
     syncCallShareButton();
+    // Starting a stream can reset Discord's inline styles and change its accessible label.
+    // Refresh replacements independently of that label so the native control stays hidden.
+    if (config.replaceShareButton) {
+        for (const replacement of document.querySelectorAll("[data-hugin-btn]")) {
+            const original = replacement.nextElementSibling;
+            if (original?.__huginReplaced) replaceShareButton(original);
+        }
+    }
     let found = false;
 
     for (const element of document.querySelectorAll(

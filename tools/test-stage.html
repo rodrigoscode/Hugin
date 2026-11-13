@@ -11,13 +11,20 @@
 <script src="../src/renderer/stage/watch-screen.js"></script>
 <script src="../src/renderer/stage/mount.js"></script>
 <script src="../src/renderer/stage/fullscreen.js"></script>
+<script src="../src/renderer/share-button/share-button.js"></script>
 <script>
     // Exercise real DOM selection, stage mounting, CSS hiding and teardown. Media/IPC are isolated.
     const native = { overlay: () => Promise.resolve() };
     const state = {
         userId: "123", userName: "Test", channelName: "Voice", avatarUrl: "",
-        streams: new Map(), resolution: "1080", fps: "60"
+        streams: new Map(), resolution: "720", fps: "30", broadcasting: true, channelId: "111:222"
     };
+    const config = { replaceShareButton: true };
+    const ICON = {
+        discordStopShare: () => '<svg data-test-icon="stop"></svg>',
+        discordShareScreen: () => '<svg data-test-icon="share"></svg>'
+    };
+    const openStreamMenu = anchor => { streamMenu = { anchor }; };
     const CAPTURED_VOLUME_CSS = "";
     const CAPTURED_ZOOM_CSS = "";
     const PARKED_STAGE_FRAME_MS = 1000;
@@ -58,6 +65,27 @@
     }
 
     async function tests() {
+        reset('<div class="centerControls_Updated" style="display:flex"><div style="display:flex;gap:8px"><div style="display:flex;flex-direction:column"><button aria-label="Começar Atividade">Activity</button></div><button aria-label="Abrir efeitos sonoros">Soundboard</button></div></div>');
+        scanShareButton();
+        const shortcut = fixture.querySelector('[data-hugin-call-share]');
+        const activity = fixture.querySelector('[aria-label="Começar Atividade"]');
+        assert(shortcut, "Missing call toolbar shortcut");
+        assert(shortcut.parentElement !== activity.parentElement, "Shortcut was stacked inside activity wrapper");
+        assert(Math.abs(shortcut.getBoundingClientRect().top - activity.getBoundingClientRect().top) < 1, "Shortcut is not beside activity");
+        scanShareButton();
+        assert(fixture.querySelectorAll('[data-hugin-call-share]').length === 1, "Toolbar shortcut duplicated on rescan");
+        passed.push("Call shortcut stays beside activity across scans");
+
+        reset('<div><button aria-label="Compartilhar tela">Native share</button></div>');
+        const original = fixture.querySelector('button');
+        scanShareButton();
+        original.style.display = "flex";
+        original.setAttribute("aria-label", "Parar de transmitir");
+        scanShareButton();
+        assert(original.style.display === "none", "Native share reappeared after its label changed");
+        assert(fixture.querySelectorAll('[data-hugin-btn]').length === 1, "Native share replacement duplicated");
+        passed.push("Native replacement survives broadcast rerenders and label changes");
+
         for (const [pageSuffix, callSuffix] of [["_5e434", "cb9592"], ["New123", "AbC-12"], ["_Other", "_Other"]]) {
             reset(`<div class="page_${pageSuffix}"><section class="wrapper_${callSuffix}"><main class="callContainer_${callSuffix}"><div id="native-grid">Call grid</div></main></section></div>`);
             const page = fixture.firstElementChild;
@@ -70,6 +98,15 @@
             assert(watchScreen.frame?.isConnected, "Video iframe did not mount");
             assert(getComputedStyle(document.getElementById("native-grid")).display === "none", "Native grid covers stage");
             assert(nativeCallContainer(page) === call, "Captured stage was mistaken for native call");
+            scanShareButton();
+            const manage = watchScreen.node.querySelector('[data-hugin-stage-share]');
+            assert(manage, "Own stream management button is missing");
+            assert(!watchScreen.node.querySelector('[data-hugin-btn], [data-hugin-call-share]'), "Scanner duplicated stage controls");
+            const shareGroup = manage.closest('[class*="attachedCaretButtonContainer_"]');
+            assert(!shareGroup.querySelector('[class*="contextMenuNub_"]'), "Split broadcast caret was not removed");
+            manage.click();
+            assert(streamMenu?.anchor === manage, "Own stream management button did not open its menu");
+            streamMenu = null;
 
             const button = watchScreen.node.querySelector('[class*="chatIcon__"]')?.closest("button, [role='button']");
             assert(button, "Captured chat button is missing");
@@ -80,7 +117,10 @@
             await Promise.resolve();
             assert(button.style.display === "", "Chat button was not restored");
 
-            closeWatchScreen();
+            const stopWatching = watchScreen.node.querySelector('button[aria-label="Parar de assistir"]');
+            assert(stopWatching, "Own stream is missing stop watching");
+            stopWatching.click();
+            assert(!watchScreen && state.broadcasting, "Stop watching must close the stage without ending the broadcast");
             assert(!call.hasAttribute("data-hugin-host"), "Host marker leaked after close");
             assert(getComputedStyle(document.getElementById("native-grid")).display !== "none", "Native grid did not return");
             passed.push("Mount, video slot, chat and close: " + pageSuffix + "/" + callSuffix);

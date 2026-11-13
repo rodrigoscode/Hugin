@@ -337,7 +337,7 @@ function mountWatchScreen(item) {
     shell.innerHTML = CAPTURED_WATCH_HTML;
     const node = shell.firstElementChild;
     node.setAttribute(WATCH_SCREEN_MARK, "");
-    if (!primaryItem.mine) swapDisconnectForStopWatching(node);
+    swapDisconnectForStopWatching(node);
 
     dropWatchControls(node, {
         keepChat: true,
