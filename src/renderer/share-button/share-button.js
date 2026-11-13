@@ -1,5 +1,5 @@
 /**
- * Replaces or hijacks Discord's screen-share button.
+ * Replaces or hijacks Discord's screen-share button and adds the call toolbar shortcut.
  */
 
 const SHARE_LABELS = [/^compartilhar (a |sua )?tela/i, /^compartilhamento de tela/i, /^share (your )?screen/i, /^screen share/i];
@@ -220,8 +220,91 @@ function takeShareButton(element) {
     else hijackShare(element);
 }
 
+/**
+ * Newer call toolbars can omit screen sharing entirely. Put our shortcut beside the activity
+ * controls, using their button styling, and recreate it when Discord remounts the toolbar.
+ */
+function syncCallShareButton() {
+    for (const controls of document.querySelectorAll('[class*="centerControls"]')) {
+        if (controls.closest("[data-hugin]")) continue;
+        let button = controls.querySelector("[data-hugin-call-share]");
+        if (!state.channelId) {
+            button?.remove();
+            continue;
+        }
+
+        const nativeShare = [...controls.querySelectorAll("button, [role='button']")].find(
+            element => !element.hasAttribute("data-hugin-call-share") && isShareButton(element)
+        );
+        if (nativeShare) {
+            button?.remove();
+            continue;
+        }
+
+        if (!button) {
+            const anchor = [...controls.querySelectorAll("button, [role='button']")].find(element =>
+                /^(começar atividade|iniciar atividade|start an activity|start activity|abrir efeitos sonoros|open soundboard|mais opções|more options)$/i.test(
+                    accessibleName(element).trim()
+                )
+            );
+            if (!anchor) continue;
+
+            // Find the actual horizontal row: Discord's activity wrapper and class names
+            // vary between client versions, and inserting inside it stacks the buttons.
+            let sibling = anchor;
+            let section = null;
+            while (sibling.parentElement && sibling.parentElement !== controls) {
+                const parent = sibling.parentElement;
+                const style = getComputedStyle(parent);
+                const horizontal = style.display.includes("flex") && style.flexDirection.startsWith("row");
+                const hasOtherControl = [...parent.querySelectorAll("button, [role='button']")].some(
+                    element => element !== sibling && !sibling.contains(element)
+                );
+                if (horizontal && hasOtherControl) {
+                    section = parent;
+                    break;
+                }
+                sibling = parent;
+            }
+            if (!section) continue;
+
+            button = document.createElement("button");
+            button.type = "button";
+            button.className = anchor.className;
+            button.setAttribute("data-hugin-call-share", "");
+            button.addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (state.broadcasting) openStreamMenu(button);
+                else openShareModal();
+            });
+            let shortcut = button;
+            let branch = anchor;
+            while (branch !== sibling) {
+                branch = branch.parentElement;
+                const wrapper = branch.cloneNode(false);
+                wrapper.removeAttribute("id");
+                wrapper.appendChild(shortcut);
+                shortcut = wrapper;
+            }
+            section.insertBefore(shortcut, sibling);
+        }
+
+        const label = state.broadcasting ? "Gerenciar transmissão" : "Transmitir";
+        button.setAttribute("aria-label", label);
+        button.title = label;
+        const active = String(state.broadcasting);
+        if (button.dataset.huginActive !== active) {
+            button.innerHTML = state.broadcasting ? ICON.discordStopShare(20) : ICON.discordShareScreen(20);
+            button.dataset.huginActive = active;
+            button.style.color = state.broadcasting ? "var(--status-positive, #23a55a)" : "";
+        }
+    }
+}
+
 function scanShareButton() {
     logPanelLabels();
+    syncCallShareButton();
     let found = false;
 
     for (const element of document.querySelectorAll(
