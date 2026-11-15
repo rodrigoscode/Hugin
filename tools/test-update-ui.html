@@ -25,12 +25,14 @@
     const passed = [], assert = (value, message) => { if (!value) throw new Error(message); };
     async function tests() {
         state.channelId = "in-call";
-        await checkHuginUpdates();
-        assert(updateBanner && !updateModal, "Automatic check interrupted an active call with a modal");
-        passed.push("An active call receives a discreet banner instead of a modal");
         document.getElementById("origin").focus();
+        await checkHuginUpdates();
+        assert(updateModal && !document.querySelector("[data-hugin-update-banner]"), "Automatic check did not open update details directly during a call");
+        assert(updateModal.host.shadowRoot.querySelector("h2").textContent === "Atualização disponível", "Automatic update has the wrong title");
+        assert(updateModal.host.shadowRoot.querySelector("img").getAttribute("src") === HUGIN_ICON, "Automatic update is missing Hugin's local image");
+        passed.push("Automatic checks open release details and Hugin's image directly, including during a call");
         await checkHuginUpdates(true);
-        assert(updateModal && !updateBanner, "Manual check did not open update details");
+        assert(document.querySelectorAll("[data-hugin-update-modal]").length === 1, "Manual check duplicated the open modal");
         const root = updateModal.host.shadowRoot;
         assert(root.querySelector(".update-notes").textContent.includes("<img"), "Release notes were not preserved as text");
         assert(!root.querySelector(".update-notes img") && !window.RELEASE_EXECUTED, "Release HTML was executed");
@@ -80,8 +82,38 @@
         let reply; native.updateSafetyReply = (token, safety) => { reply = { token, safety }; };
         safetyRequest("nonce"); assert(reply.token === "nonce" && reply.safety.idle, "Fresh safety request was not answered");
         passed.push("Progress and fresh safety replies are connected to the preload bridge");
+
+        closeUpdateModal(); updateInfo = null;
+        stores.selectedChannel = null;
+        native.update = async request => { calls.push(request); return request.action === "check" ? { ...available(), prepared: true } : { ok: true }; };
+        await checkHuginUpdates();
+        assert(updateModal && updateModal.primary.disabled, "Unknown call state hid update details or enabled installation");
+        passed.push("Unknown call state still shows the release directly while blocking installation");
+
+        closeUpdateModal();
+        native.update = async request => request.action === "check" ? { ...available(), notify: false } : { ok: true };
+        await checkHuginUpdates();
+        assert(!updateModal, "An ignored or postponed update reopened automatically");
+        await checkHuginUpdates(true);
+        assert(updateModal, "Manual access could not reopen postponed release details");
+        passed.push("Postponed or ignored releases stay quiet until explicitly reopened");
+
+        stores.selectedChannel = { getVoiceChannelId: () => null };
+        native.update = request => {
+            calls.push(request);
+            if (request.action === "download") return new Promise(resolve => { finishDownload = resolve; });
+            return Promise.resolve({ ok: true });
+        };
+        const backgroundDownload = performUpdate();
+        const postponements = calls.filter(call => call.action === "later").length;
+        updateModal.host.shadowRoot.querySelector("[data-later]").click();
+        assert(!updateModal && calls.filter(call => call.action === "later").length === postponements, "Postponement competed with the active download");
+        finishDownload({ ok: true }); await backgroundDownload;
+        assert(!updateModal && !document.querySelector("[data-hugin-update-banner]"), "Completed background download reopened a dismissed notification");
+        assert(calls.filter(call => call.action === "later").length === postponements + 1, "Background download did not persist postponement after completion");
+        passed.push("Dismissing an active download postpones after completion without showing a banner or reopening the modal");
     }
     tests().then(() => { const out = document.getElementById("result"); out.dataset.status = "pass"; out.textContent = passed.join("\n") + "\nPASS: " + passed.length + " scenarios"; })
         .catch(error => { const out = document.getElementById("result"); out.dataset.status = "fail"; out.textContent = passed.join("\n") + "\n" + error.stack; })
-        .finally(() => { closeUpdateModal(); dismissUpdateBanner(); });
+        .finally(() => { closeUpdateModal(); });
 </script>

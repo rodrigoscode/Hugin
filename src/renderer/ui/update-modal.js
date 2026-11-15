@@ -9,17 +9,16 @@ const UPDATE_CSS = `
     .update-notes { white-space:pre-wrap; overflow-wrap:anywhere; max-height:260px; overflow:auto; padding:14px; border-radius:6px;
         background:var(--background-secondary,#2b2d31); line-height:1.5; }
     .update-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; margin-top:18px; }
-    .update-dialog button,.update-banner button { font:inherit; border:0; border-radius:4px; padding:9px 12px; cursor:pointer;
+    .update-dialog button { font:inherit; border:0; border-radius:4px; padding:9px 12px; cursor:pointer;
         background:var(--background-secondary,#2b2d31); color:inherit; }
-    .update-dialog button:focus-visible,.update-banner button:focus-visible { outline:2px solid #00a8fc; outline-offset:2px; }
+    .update-dialog button:focus-visible { outline:2px solid #00a8fc; outline-offset:2px; }
     .update-dialog button[data-primary] { background:#5865f2; color:white; }
     .update-dialog button:disabled { opacity:.5; cursor:default; }
     .update-dialog progress { display:block; width:100%; margin-top:12px; accent-color:#5865f2; }
     .update-status { min-height:36px; line-height:1.4; margin-top:12px; }
-    .update-banner { position:fixed; left:20px; bottom:24px; max-width:min(420px,calc(100vw - 40px)); padding:12px;
-        background:var(--background-floating,#18191c); color:var(--text-normal,#dbdee1); border-radius:8px; pointer-events:auto; box-shadow:0 8px 24px #0006; }
 `;
-let updateInfo = null, updateModal = null, updateBanner = null, updateUIBusy = false, updateUIStarted = false;
+let updateInfo = null, updateModal = null, updateUIBusy = false, updateUIStarted = false;
+let updatePostponePending = false;
 let updateUIPhase = "", updateDownloadProgress = null;
 
 function updatePlaybackSafety() {
@@ -29,20 +28,6 @@ function updatePlaybackSafety() {
             !state.channelId && !state.broadcasting && !state.watching && !state.probing &&
             streamFrames.size === 0 && releasingStreamFrames.size === 0 };
     } catch { return { known: false, idle: false }; }
-}
-
-function dismissUpdateBanner() { updateBanner?.remove(); updateBanner = null; }
-
-function showUpdateBanner() {
-    if (updateBanner || updateModal || !updateInfo?.available) return;
-    const { host, root } = mountShadow(BASE_CSS + UPDATE_CSS);
-    host.setAttribute("data-hugin-update-banner", "");
-    const banner = document.createElement("div"); banner.className = "update-banner";
-    const text = document.createElement("span"); text.textContent = updateInfo.prepared ? "Atualização pronta para instalar. " : "Há uma atualização do Hugin. ";
-    const details = document.createElement("button"); details.textContent = "Ver atualização"; details.onclick = () => openUpdateModal();
-    const later = document.createElement("button"); later.textContent = "Depois";
-    later.onclick = () => { dismissUpdateBanner(); native.update({ action: "later" }).catch(() => {}); };
-    banner.append(text, details, later); root.append(banner); updateBanner = host;
 }
 
 function closeUpdateModal() {
@@ -98,13 +83,15 @@ async function performUpdate() {
         else showDiagnosticStatus(updateError(result), 8000);
     } finally {
         updateUIBusy = false; updateUIPhase = ""; refreshUpdateModal();
-        if (!updateModal) showUpdateBanner();
+        if (updatePostponePending) {
+            updatePostponePending = false;
+            native.update({ action: "later" }).catch(() => {});
+        }
     }
 }
 
 function openUpdateModal() {
     if (updateModal || !updateInfo?.available) return;
-    dismissUpdateBanner();
     const { host, root } = mountShadow(BASE_CSS + UPDATE_CSS);
     host.setAttribute("data-hugin-update-modal", "");
     const shade = document.createElement("div"); shade.className = "update-shade";
@@ -123,7 +110,7 @@ function openUpdateModal() {
     dialog.querySelector(".update-notes").textContent = updateInfo.release.notes;
     const later = () => {
         const busy = updateUIBusy; closeUpdateModal();
-        if (busy) showUpdateBanner(); else native.update({ action: "later" }).catch(() => {});
+        if (busy) updatePostponePending = true; else native.update({ action: "later" }).catch(() => {});
     };
     dialog.querySelector("[data-later]").onclick = later;
     dialog.querySelector("[data-ignore]").onclick = async () => {
@@ -159,9 +146,8 @@ async function checkHuginUpdates(manual = false) {
         const result = await native.update({ action: "check", manual });
         if (!result?.ok) { if (manual) showDiagnosticStatus(updateError(result), 8000); return; }
         updateInfo = result;
-        if (!result.available) dismissUpdateBanner();
         if (result.available && (manual || result.notify)) {
-            if (manual || updatePlaybackSafety().idle) openUpdateModal(); else showUpdateBanner();
+            openUpdateModal();
         } else if (manual) showDiagnosticStatus(result.warning ? "A release mais recente ainda não possui um instalador verificável." : "O Hugin já está atualizado.", 5000);
     } catch { if (manual) showDiagnosticStatus("Não foi possível verificar atualizações. Tente novamente.", 6000); }
     finally { updateUIBusy = false; refreshUpdateModal(); }
