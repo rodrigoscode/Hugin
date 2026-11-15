@@ -9,6 +9,7 @@
 <pre id="result" data-status="running">Running</pre>
 <script src="../src/renderer/captures/stage.capture.js"></script>
 <script src="../src/renderer/stage/watch-screen.js"></script>
+<script src="../src/renderer/stage/stream-frame.js"></script>
 <script src="../src/renderer/stage/mount.js"></script>
 <script src="../src/renderer/stage/fullscreen.js"></script>
 <script src="../src/renderer/share-button/share-button.js"></script>
@@ -16,7 +17,7 @@
     // Exercise real DOM selection, stage mounting, CSS hiding and teardown. Media/IPC are isolated.
     const native = { overlay: () => Promise.resolve() };
     const state = {
-        userId: "123", userName: "Test", channelName: "Voice", avatarUrl: "",
+        userId: "123", userName: "Test", channelName: "Voice", avatarUrl: "", pushId: "own",
         streams: new Map(), resolution: "720", fps: "30", broadcasting: true, channelId: "111:222"
     };
     const config = { replaceShareButton: true };
@@ -27,7 +28,6 @@
     const openStreamMenu = anchor => { streamMenu = { anchor }; };
     const CAPTURED_VOLUME_CSS = "";
     const CAPTURED_ZOOM_CSS = "";
-    const PARKED_STAGE_FRAME_MS = 1000;
     let stageView = null, streamMenu = null, stageMenu = null;
     const logs = [];
     const log = (...args) => logs.push(args.join(" "));
@@ -37,10 +37,11 @@
     const assert = (condition, message) => { if (!condition) throw new Error(message); };
     const noop = () => {};
     const closeLivePreview = noop, closePip = noop, closeStageMenu = noop;
-    const dropAllStreamFrames = noop, dropStreamFrame = noop, syncViewBounds = noop;
+    const syncViewBounds = noop;
     const bindStageMenu = noop, releaseFocusAfterClick = noop, leftStage = noop;
-    const parkStreamFrame = noop;
-    const streamIdOf = item => item.key;
+    const soloUrl = () => "about:blank";
+    const itemQuality = () => ({ height: 720, fps: 30 });
+    const requestedBitrate = () => 2500;
     const streamOwner = () => "456";
     const avatarFor = () => "";
     const heightLabel = height => height;
@@ -135,6 +136,27 @@
         closeWatchScreen();
         assert(document.getElementById("chat").style.display === "flex", "Fallback display was not restored");
         passed.push("Non-call page fallback and captured-stage exclusion");
+
+        reset('<div class="page_Updated"><main class="callContainer_Updated"></main></div>');
+        const stubVideo = mountWatchVideo;
+        mountWatchVideo = (node, item, options) => {
+            const parent = node.querySelector('[class*="videoSizer_"]');
+            const taken = takeStreamFrame(parent, null, item, STAGE_FRAME_STYLE, options);
+            return { ...taken, playing: true, slot: { parent, ref: null } };
+        };
+        openWatchScreen({ key: "previous", label: "Previous" });
+        const previousFrame = watchScreen.frame;
+        openWatchScreen({ key: "next", label: "Next" });
+        assert(previousFrame.dataset.huginDropping === "1", "Replaced player was not released");
+        assert(!previousFrame.isConnected, "Replaced iframe remains connected and can play audio");
+        assert(streamFrames.size === 1 && streamFrames.has("view:next"), "Replaced stream remains registered");
+        const nextFrame = watchScreen.frame;
+        openWatchScreen({ key: "next", label: "Next" });
+        if (canMoveFrames()) assert(watchScreen.frame === nextFrame, "Reopening the same stream must retain its player");
+        closeWatchScreen();
+        assert(streamFrames.size === 0, "Closing the stage leaked its player");
+        mountWatchVideo = stubVideo;
+        passed.push("Replacing a stream releases its iframe; reopening the same stream retains it");
 
         reset('<div class="homepage_Decoy"></div>');
         assert(chatPage() === null, "Unrelated page-like class was selected");

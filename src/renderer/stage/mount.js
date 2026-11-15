@@ -332,6 +332,12 @@ function mountWatchScreen(item) {
         keepFrame: true
     });
 
+    // Parked players stay audible: only retain streams that belong to the new stage.
+    const retainedFrames = new Set(watchItems.map(entry => streamFrameKey(streamIdOf(entry), Boolean(entry.mine))));
+    for (const [key, entry] of streamFrames) {
+        if (!retainedFrames.has(key)) dropStreamFrame(entry.streamId, entry.mine);
+    }
+
     ensureWatchStyle();
     const shell = document.createElement("div");
     shell.innerHTML = CAPTURED_WATCH_HTML;
