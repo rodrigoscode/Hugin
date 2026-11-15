@@ -6,6 +6,7 @@
  * With keepFrame the stream's iframe is parked for the PiP or a new stage; otherwise it is dropped.
  */
 function closeWatchScreen(options = {}) {
+    pendingOpen++;
     if (!watchScreen) {
         if (!options.keepFrame) dropAllStreamFrames();
         return;
@@ -32,19 +33,8 @@ function closeWatchScreen(options = {}) {
     clearInterval(watchScreen.exitWatcher);
     watchScreen.hostElement?.removeAttribute("data-hugin-host");
     const iframeVideo = watchScreen.frame;
-    for (const frame of watchScreen.frames ?? (iframeVideo ? [iframeVideo] : [])) {
-        if (frame?.huginListener) removeEventListener("message", frame.huginListener);
-        clearInterval(frame?.huginWatchdog);
-    }
-
     const frames = watchScreen.frames ?? (iframeVideo ? [iframeVideo] : []);
-
-    if (options.keepFrame && frames.length === 1) {
-        const frame = frames[0];
-        parkStreamFrame(frame.dataset.huginStream, frame.dataset.huginMine === "1");
-    } else {
-        for (const frame of frames) dropStreamFrame(frame.dataset.huginStream, frame.dataset.huginMine === "1");
-    }
+    detachStreamFrames(frames, options.keepFrame);
 
     watchScreen.node.remove();
     for (const hidden of watchScreen.hidden) hidden.el.style.display = hidden.display;
@@ -314,7 +304,6 @@ function mountWatchScreen(item) {
     const page = chatPage();
     const watchItems = watchItemsOf(item);
     const primaryItem = watchItems[0] ?? item;
-    const wasMultiWatch = (watchScreen?.frames?.length ?? 0) > 1;
 
     if (!page) {
         dropStreamFrame();
@@ -332,11 +321,7 @@ function mountWatchScreen(item) {
         keepFrame: true
     });
 
-    // Parked players stay audible: only retain streams that belong to the new stage.
-    const retainedFrames = new Set(watchItems.map(entry => streamFrameKey(streamIdOf(entry), Boolean(entry.mine))));
-    for (const [key, entry] of streamFrames) {
-        if (!retainedFrames.has(key)) dropStreamFrame(entry.streamId, entry.mine);
-    }
+    retainStreamFrames(watchItems);
 
     ensureWatchStyle();
     const shell = document.createElement("div");
@@ -489,7 +474,7 @@ function mountWatchScreen(item) {
     if (!primaryItem.mine) dropBroadcastButton(node);
     const initialAspect = watchItems.length > 1 ? gridAspectFor(watchItems) : knownAspect(primaryItem);
     if (initialAspect) node.dataset.huginAspect = String(initialAspect);
-    const video = watchItems.length > 1 ? mountWatchVideoGrid(node, watchItems) : mountWatchVideo(node, primaryItem, { fresh: wasMultiWatch });
+    const video = watchItems.length > 1 ? mountWatchVideoGrid(node, watchItems) : mountWatchVideo(node, primaryItem);
     if (!video) dropStreamFrame();
     const volume = watchItems.length > 1 ? null : mountWatchVolume(node, primaryItem);
     fitWatchStage(node);
@@ -537,7 +522,8 @@ function mountWatchScreen(item) {
         if (watchScreen.parkedAt && Date.now() - watchScreen.parkedAt > PARKED_STAGE_FRAME_MS) {
             watchScreen.parkedAt = 0;
             const slot = watchScreen.frameSlot;
-            if (!placeStreamFrame(slot?.parent, slot?.ref, STAGE_FRAME_STYLE)) mountWatchScreen(watchScreen.item);
+            if (watchScreen.frames.length > 1 || !placeStreamFrame(slot?.parent, slot?.ref, STAGE_FRAME_STYLE))
+                mountWatchScreen(watchScreen.item);
         }
     }, 250);
 

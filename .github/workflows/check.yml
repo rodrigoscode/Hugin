@@ -1,0 +1,49 @@
+name: Validate
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Test and build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Bundle payload
+        run: go run ./tools/bundle
+
+      - name: Test Go packages
+        run: go test ./...
+
+      - name: Test capture isolation
+        run: node --test tools/test-capture.cjs
+
+      - name: Test stage and playback in Edge
+        run: node tools/run-stage-tests.cjs
+
+      - name: Build and validate executable
+        shell: pwsh
+        run: ./build.ps1
+
+      - name: Upload validated executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: hugin-windows
+          path: dist/Hugin.exe
+          if-no-files-found: error

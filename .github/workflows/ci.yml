@@ -5,31 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build and test
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Bundle payload
-        run: go run ./tools/bundle
-
-      - name: Test Go packages
-        run: go test ./...
-
-      - name: Build executable
-        shell: pwsh
-        run: ./build.ps1
+    uses: ./.github/workflows/check.yml

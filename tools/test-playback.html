@@ -1,0 +1,263 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Hugin playback lifecycle regression tests</title>
+<div id="fixture"></div>
+<pre id="result" data-status="running">Running</pre>
+<script src="../src/renderer/captures/stage.capture.js"></script>
+<script src="../src/renderer/stage/watch-screen.js"></script>
+<script src="../src/renderer/stage/stream-frame.js"></script>
+<script src="../src/renderer/stage/pip.js"></script>
+<script src="../src/renderer/stage/mount.js"></script>
+<script>
+    // Use the real stage, grid, PiP and session lifecycle. Only external media, IPC and UI decoration
+    // are isolated: these tests validate resource ownership, not WebRTC or audible output.
+    const noop = () => {};
+    const native = { overlay: () => Promise.resolve() };
+    const ICON = { discordStopShare: () => "<svg></svg>" };
+    const state = {
+        userId: "123", userName: "Test", channelName: "Voice", channelId: "111:222", pushId: "own",
+        streams: new Map(), streamVolumes: new Map(), streamMuted: new Map(), volume: 1,
+        resolution: 720, fps: 30, broadcasting: false
+    };
+    const CAPTURED_VOLUME_CSS = "", CAPTURED_ZOOM_CSS = "", BASE_CSS = "";
+    let stageView = null, stageMenu = null, stageTooltips = null, streamMenu = null;
+    let leftViaGateway = false;
+    const alpha = { key: "alpha", label: "Alpha" };
+    const beta = { key: "beta", label: "Beta" };
+    const gamma = { key: "gamma", label: "Gamma" };
+    const streamers = () => [alpha, beta, gamma];
+    const log = noop;
+    const closeLivePreview = noop, closeStageMenu = noop, syncViewBounds = noop;
+    const bindStageMenu = noop, releaseFocusAfterClick = noop;
+    const bindFullscreen = () => noop, bindStageZoom = () => noop;
+    const bindPipDrag = () => ({ unmount: noop, isDragging: () => false });
+    const createPipTooltip = noop;
+    const voiceChannelId = () => state.channelId;
+    const streamOwner = () => "456", avatarFor = () => "", heightLabel = height => height;
+    const soloUrl = () => "about:blank";
+    const itemQuality = () => ({ height: 720, fps: 30 }), requestedBitrate = () => 2500;
+    mountWatchVolume = () => null;
+
+    function mountShadow() {
+        const host = document.createElement("div");
+        document.body.appendChild(host);
+        return { host, root: host.attachShadow({ mode: "open" }) };
+    }
+
+    buildPipShell = () => {
+        const { host, root } = mountShadow();
+        const shell = document.createElement("div");
+        const surface = document.createElement("div");
+        shell.appendChild(surface);
+        root.appendChild(shell);
+        return { host, shell, pipWindow: shell, surface };
+    };
+    const CAPTURED_SPINNER_HTML = '<span data-test-spinner></span>';
+
+    const fixture = document.getElementById("fixture");
+    const result = document.getElementById("result");
+    const passed = [];
+    const assert = (condition, message) => { if (!condition) throw new Error(message); };
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    function reset() {
+        closePip();
+        closeWatchScreen();
+        dropAllStreamFrames();
+        closeWatchChoiceMenu();
+        fixture.innerHTML = '<div class="page_Test"><main class="callContainer_Test"></main></div>';
+    }
+
+    function choose(item, action) {
+        requestWatchStream(item);
+        const button = watchChoiceMenu?.host.shadowRoot.querySelector(`[data-action="${action}"]`);
+        assert(button, "Missing watch choice: " + action);
+        button.click();
+    }
+
+    function assertReleased(frame, message) {
+        assert(!frame.isConnected && frame.dataset.huginDropping === "1", message);
+        assert(!frame.huginListener && !frame.huginWatchdog, "Released frame retained its surface bindings");
+    }
+
+    async function tests() {
+        reset();
+        openWatchScreen(alpha);
+        const replaced = watchScreen.frame;
+        choose(beta, "replace");
+        assertReleased(replaced, "Replace left the previous player connected");
+        assert(streamFrames.size === 1 && streamFrames.has("view:beta"), "Replace retained a stale session");
+        passed.push("Replace closes the previous player through the actual choice button");
+
+        reset();
+        openWatchScreen(alpha);
+        const original = watchScreen.frame;
+        choose(beta, "join");
+        assert(watchScreen.frames.length === 2 && streamFrames.size === 2, "Join did not create exactly two sessions");
+        if (canMoveFrames()) assert(watchScreen.frames[0] === original, "Join restarted the original player");
+        const kept = watchScreen.frames[0];
+        const removed = watchScreen.frames[1];
+        stopWatchingStream(beta.key);
+        assertReleased(removed, "Removing a grid stream left its player connected");
+        assert(streamFrames.size === 1 && watchScreen.item.key === alpha.key, "Grid removal retained the wrong session");
+        if (canMoveFrames()) assert(watchScreen.frame === kept, "Grid removal restarted the remaining stream");
+        passed.push("Join and grid removal preserve the selected player and release the other");
+
+        choose(beta, "join");
+        const oldGrid = [...watchScreen.frames];
+        choose(gamma, "replace");
+        for (const frame of oldGrid) assertReleased(frame, "Replacing a grid left an old player connected");
+        assert(streamFrames.size === 1 && streamFrames.has("view:gamma"), "Grid replacement leaked a session");
+        passed.push("Replacing a two-stream grid releases both old players");
+
+        reset();
+        openWatchScreen(alpha);
+        choose(beta, "join");
+        const parkedGrid = [...watchScreen.frames];
+        beforeNavigation("/channels/still-mounted");
+        await delay(850);
+        assert(watchScreen.frames.length === 2 && !watchScreen.parkedAt, "Grid was not restored after navigation kept the call mounted");
+        assert(watchScreen.frames.every(frame => watchScreen.node.contains(frame)), "Grid player remained parked off screen");
+        if (canMoveFrames()) {
+            assert(watchScreen.frames.every((frame, index) => frame === parkedGrid[index]), "Restoring the parked grid restarted playback");
+        }
+        passed.push("A parked grid returns to its own slots when the call screen stays mounted");
+
+        reset();
+        openWatchScreen(alpha);
+        const stageFrame = watchScreen.frame;
+        const stageListener = stageFrame.huginListener;
+        beforeNavigation("/channels/other");
+        watchScreen.node.remove();
+        leftStage();
+        assert(!watchScreen && pip?.frame.isConnected, "Leaving the call screen did not hand playback to PiP");
+        if (canMoveFrames()) assert(pip.frame === stageFrame, "PiP restarted the stage player");
+        assert(pip.frame.huginListener !== stageListener && !pip.frame.huginWatchdog, "PiP retained stage bindings");
+        const pipFrame = pip.frame;
+        returnFromPip();
+        assert(!pip && watchScreen?.frame.isConnected, "Returning from PiP did not restore the stage");
+        if (canMoveFrames()) assert(watchScreen.frame === pipFrame, "Returning from PiP restarted playback");
+        assert(streamFrames.size === 1, "PiP round trip duplicated a session");
+        passed.push("Navigation transfers playback from stage to PiP and back with fresh bindings");
+
+        choose(beta, "join");
+        const navigatingGrid = [...watchScreen.frames];
+        beforeNavigation("/channels/grid-other");
+        if (canMoveFrames()) {
+            assert(navigatingGrid.every(frame => frame.parentElement === frameParking), "Navigation did not park every grid player");
+        }
+        watchScreen.node.remove();
+        leftStage();
+        assert(pip?.item.key === alpha.key && streamFrames.size === 1, "Grid navigation did not select one PiP session");
+        assertReleased(navigatingGrid[1], "Grid navigation left the secondary player audible behind PiP");
+        if (canMoveFrames()) assert(pip.frame === navigatingGrid[0], "Grid navigation restarted the PiP selection");
+        returnFromPip();
+        passed.push("Grid navigation parks all players and releases the stream not selected for PiP");
+
+        closeWatchScreen({ keepFrame: true });
+        openPip(alpha);
+        const previousPip = pip.frame;
+        openPip(beta);
+        assertReleased(previousPip, "Replacing PiP left the previous player connected");
+        assert(streamFrames.size === 1 && streamFrames.has("view:beta"), "PiP replacement retained a stale session");
+        const finalPip = pip.frame;
+        closePip();
+        assertReleased(finalPip, "Closing PiP did not release its player");
+        assert(streamFrames.size === 0, "Closing PiP leaked a session");
+        passed.push("Replacing and closing PiP release their sessions");
+
+        reset();
+        const moveSupport = canMoveFrames;
+        try {
+            canMoveFrames = () => false;
+            openWatchScreen(alpha);
+            const old = watchScreen.frame;
+            choose(beta, "join");
+            assertReleased(old, "Fallback browser retained an unmovable frame");
+            assert(streamFrames.size === 2 && watchScreen.frames.every(frame => frame.isConnected), "Fallback did not recreate the grid");
+            stopWatchingStream(beta.key);
+            assert(streamFrames.size === 1 && watchScreen.frame.isConnected, "Fallback failed to restore single playback");
+            closeWatchScreen();
+            assert(streamFrames.size === 0, "Fallback close leaked sessions");
+        } finally {
+            canMoveFrames = moveSupport;
+        }
+        passed.push("Browsers without moveBefore recreate players without leaking sessions");
+
+        reset();
+        fixture.innerHTML = '<div class="page_Test"></div>';
+        const originalCallLink = callLink;
+        const originalAnimationFrame = window.requestAnimationFrame;
+        const pendingFrames = [];
+        const flushAnimationFrame = () => pendingFrames.splice(0).forEach(callback => callback());
+        try {
+            // Drive the navigation race explicitly; headless browsers can stop painting after timers.
+            window.requestAnimationFrame = callback => pendingFrames.push(callback);
+            callLink = () => ({ click: noop });
+            openWatchScreen(alpha);
+            openWatchScreen(beta);
+            fixture.firstChild.innerHTML = '<main class="callContainer_Test"></main>';
+            flushAnimationFrame();
+            assert(watchScreen?.item.key === beta.key && streamFrames.size === 1, "An older open request won the navigation race");
+            closeWatchScreen();
+            fixture.firstChild.innerHTML = "";
+            openWatchScreen(alpha);
+            closeWatchScreen();
+            fixture.firstChild.innerHTML = '<main class="callContainer_Test"></main>';
+            flushAnimationFrame();
+            assert(!watchScreen && streamFrames.size === 0, "Closing playback did not cancel a pending navigation");
+            fixture.firstChild.innerHTML = "";
+            openPip(alpha);
+            returnFromPip();
+            closePip();
+            fixture.firstChild.innerHTML = '<main class="callContainer_Test"></main>';
+            flushAnimationFrame();
+            assert(!watchScreen && !pip && streamFrames.size === 0, "Closing PiP did not cancel its pending return to the stage");
+        } finally {
+            callLink = originalCallLink;
+            window.requestAnimationFrame = originalAnimationFrame;
+        }
+        passed.push("Latest open request wins; closing stage or PiP cancels pending navigation");
+
+        reset();
+        let muted = false;
+        native.setStreamGain = ({ gain }) => {
+            muted = gain === 0;
+            return new Promise(() => {});
+        };
+        try {
+            openWatchScreen(alpha);
+            const stalled = watchScreen.frame;
+            closeWatchScreen();
+            assert(muted && streamFrames.size === 0, "Teardown did not mute and unregister the player");
+            await delay(300);
+            assertReleased(stalled, "Unresponsive gain IPC prevented player teardown");
+        } finally {
+            delete native.setStreamGain;
+        }
+        passed.push("Unresponsive audio IPC cannot keep a released player alive");
+
+        reset();
+        openWatchScreen(alpha);
+        choose(beta, "join");
+        const frames = [...watchScreen.frames];
+        closeWatchScreen();
+        for (const frame of frames) assertReleased(frame, "Closing the grid leaked a player");
+        closeWatchScreen();
+        closePip();
+        assert(streamFrames.size === 0 && !streamFrame, "Repeated teardown left an active session");
+        passed.push("Closing a grid releases all players and repeated teardown is safe");
+    }
+
+    tests().then(() => {
+        result.dataset.status = "pass";
+        result.textContent = passed.join("\n") + "\nPASS: " + passed.length + " scenarios";
+    }).catch(error => {
+        result.dataset.status = "fail";
+        result.textContent = error.stack;
+    }).finally(() => {
+        closePip();
+        closeWatchScreen();
+        dropAllStreamFrames();
+    });
+</script>

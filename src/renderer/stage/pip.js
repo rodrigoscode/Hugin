@@ -26,6 +26,7 @@ function openPip(item) {
     closePip({
         keepFrame: true
     });
+    retainStreamFrames([item]);
 
     const parts = buildPipShell(item);
 
@@ -190,6 +191,7 @@ function attachPipVideo(surface, item) {
     };
 
     addEventListener("message", listener);
+    frame.huginListener = listener;
 
     return {
         frame,
@@ -251,6 +253,7 @@ function watchPipStream(item) {
  * With keepFrame the stream's iframe is parked for the stage; otherwise it is dropped.
  */
 function closePip(options = {}) {
+    if (!options.keepFrame) pendingOpen++;
     if (!pip) {
         if (!options.keepFrame) dropStreamFrame();
         return;
@@ -260,12 +263,7 @@ function closePip(options = {}) {
     pip.stopIdle();
     pip.unmountPosition();
     if (streamMenu && pip.host.shadowRoot?.contains(streamMenu.anchor)) closeStreamMenu();
-    if (pip.listener) removeEventListener("message", pip.listener);
-
-    if (pip.frame) {
-        if (options.keepFrame) parkStreamFrame(pip.frame.dataset.huginStream, pip.frame.dataset.huginMine === "1");
-        else dropStreamFrame(pip.frame.dataset.huginStream, pip.frame.dataset.huginMine === "1");
-    }
+    detachStreamFrames(pip.frame ? [pip.frame] : [], options.keepFrame);
 
     pip.host.remove();
     pip = null;

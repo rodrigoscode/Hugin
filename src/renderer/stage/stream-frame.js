@@ -1,6 +1,6 @@
 /**
- * One VDO.Ninja iframe for the stream being watched, moved between the stage and the PiP instead of
- * recreated, so switching between them keeps the stream playing.
+ * Playback sessions keyed by stream and role. Frames move between the stage, grid and PiP instead
+ * of being recreated. Selection changes must release every session that is no longer watched.
  */
 
 let streamFrame = null;
@@ -29,6 +29,36 @@ function streamFrameKey(streamId, mine) {
 
 function setActiveStreamFrame(entry) {
     streamFrame = entry ?? null;
+}
+
+/**
+ * A parked frame still plays audio. Keep only the sessions owned by the next playback surface.
+ */
+function retainStreamFrames(items) {
+    const retained = new Set(items.map(item => streamFrameKey(streamIdOf(item), Boolean(item.mine))));
+    for (const [key, entry] of streamFrames) {
+        if (!retained.has(key)) dropStreamFrame(entry.streamId, entry.mine);
+    }
+}
+
+function clearStreamFrameBindings(frame) {
+    if (!frame) return;
+    if (frame.huginListener) removeEventListener("message", frame.huginListener);
+    clearInterval(frame.huginWatchdog);
+    frame.huginListener = null;
+    frame.huginWatchdog = null;
+}
+
+/**
+ * Detach surface-specific handlers before handing sessions over or ending playback.
+ * Browsers without moveBefore recreate the frames on the next surface.
+ */
+function detachStreamFrames(frames, keepFrame = false) {
+    for (const frame of frames) {
+        clearStreamFrameBindings(frame);
+        if (keepFrame) parkStreamFrame(frame.dataset.huginStream, frame.dataset.huginMine === "1");
+        else dropStreamFrame(frame.dataset.huginStream, frame.dataset.huginMine === "1");
+    }
 }
 
 /**
@@ -165,6 +195,7 @@ function releaseStreamFrame(entry) {
     const frame = entry.frame;
     if (!frame || frame.dataset.huginDropping === "1") return;
     frame.dataset.huginDropping = "1";
+    clearStreamFrameBindings(frame);
 
     if (frame.isConnected && canMoveFrames()) {
         if (!frameParking?.isConnected) {
@@ -242,8 +273,12 @@ function beforeNavigation(path) {
     const from = navigationPath;
     navigationPath = path;
     if (path === from || !watchScreen?.frame || watchScreen.parkedAt) return;
-    if (streamFrame?.frame !== watchScreen.frame) return;
-    if (parkStreamFrame()) watchScreen.parkedAt = Date.now();
+    const frames = watchScreen.frames ?? [watchScreen.frame];
+    let parked = false;
+    for (const frame of frames) {
+        parked = parkStreamFrame(frame.dataset.huginStream, frame.dataset.huginMine === "1") || parked;
+    }
+    if (parked) watchScreen.parkedAt = Date.now();
 }
 
 function watchStreamFrames() {

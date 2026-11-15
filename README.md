@@ -103,3 +103,28 @@ Precisa de Go e Node.js. Na pasta do projeto:
 ```
 
 O executável sai em `dist\Hugin.exe`.
+
+### Testes e validação
+
+Depois de gerar o payload com `go run ./tools/bundle`, execute:
+
+```powershell
+go test ./...
+node --test tools/test-capture.cjs
+node tools/run-stage-tests.cjs
+```
+
+Os testes de navegador usam o Microsoft Edge em modo headless. Se estiver instalado em outro local, defina `HUGIN_TEST_BROWSER` com o caminho do executável. Eles verificam a integração com o DOM do Discord e o ciclo de vida dos players: substituir, assistir junto, remover uma transmissão, alternar entre palco e PiP, cancelar aberturas pendentes e liberar recursos. A captura de mídia e o IPC são isolados; áudio e vídeo reais ainda precisam ser conferidos em uma call.
+
+A CI e as releases usam o mesmo workflow de validação: testes Go, testes JavaScript e build com verificação de sintaxe e referências. A release publica o executável produzido por esse workflow, sem recompilá-lo na etapa de publicação.
+
+### Organização do código
+
+- `internal/`: instalador, configuração e captura de áudio em Go.
+- `src/main/`: integração com o processo principal do Electron, captura e janelas de mídia.
+- `src/preload/`: comunicação entre os processos e adaptação da captura.
+- `src/renderer/`: interface e integração com o Discord.
+- `src/renderer/stage/stream-frame.js`: registro das sessões de reprodução e rotinas compartilhadas de retenção, transferência e encerramento dos players.
+- `src/renderer/captures/`: markup e estilos capturados da interface do Discord.
+
+Os arquivos `src/main/modules.txt` e `src/renderer/modules.txt` definem a ordem de concatenação dos módulos, que compartilham escopo dentro de cada bundle. Ao adicionar um módulo, inclua-o no manifesto correspondente e execute o build para conferir as referências.
