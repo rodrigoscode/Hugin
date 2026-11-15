@@ -23,6 +23,7 @@ vdo/urls.js
 core/state.js
 ui/foundation.js
 ui/diagnostics.js
+ui/update-modal.js
 stage/view-bounds.js
 ui/gear-animation.js
 ui/share-quality.js

@@ -9,6 +9,7 @@ import (
 	"hugin/internal/discordinstall"
 	"hugin/internal/injector"
 	"hugin/internal/paths"
+	"hugin/internal/updater"
 	"hugin/internal/version"
 )
 
@@ -71,6 +72,27 @@ func applyDebugMarker(opts cliui.Options) {
 }
 
 func RunInstall(opts cliui.Options, loadPayload PayloadLoader, loadSounds SoundsLoader, loadFonts FontsLoader) int {
+	updateDir := filepath.Join(paths.DataDirectory(), "updates")
+	unlock, lockErr := updater.Lock(updateDir)
+	if lockErr != nil {
+		cliui.Fail(lockErr.Error())
+		return 1
+	}
+	defer unlock()
+	recovery := filepath.Join(updateDir, "recovery")
+	if _, err := os.Stat(filepath.Join(recovery, "journal.json")); err == nil {
+		for _, install := range discordinstall.FindInstalls() {
+			running, err := discordinstall.RunningChecked(install.Branch.Executable)
+			if err != nil || running {
+				cliui.Fail("Close every Discord client before recovering an interrupted Hugin update.")
+				return 1
+			}
+		}
+		if err := updater.Recover(recovery); err != nil {
+			cliui.Fail(err.Error())
+			return 1
+		}
+	}
 	installs, err := selectInstalls(opts)
 	if err != nil {
 		cliui.Fail(err.Error())

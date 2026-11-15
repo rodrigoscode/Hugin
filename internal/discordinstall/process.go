@@ -3,6 +3,7 @@
 package discordinstall
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,15 @@ import (
 	"syscall"
 	"time"
 )
+
+// RunningChecked fails closed when Windows cannot enumerate processes.
+func RunningChecked(executable string) (bool, error) {
+	out, err := hiddenCmd("tasklist", "/FI", "IMAGENAME eq "+executable, "/NH").Output()
+	if err != nil {
+		return false, fmt.Errorf("cannot verify whether Discord is closed: %w", err)
+	}
+	return strings.Contains(strings.ToLower(string(out)), strings.ToLower(executable)), nil
+}
 
 // createNoWindow keeps tasklist/taskkill/the launched app from flashing a
 // console window behind our own GUI-subsystem binary.

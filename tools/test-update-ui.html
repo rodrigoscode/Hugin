@@ -1,0 +1,87 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Hugin update UI regression tests</title>
+<button id="origin">Update menu</button>
+<pre id="result" data-status="running">Running</pre>
+<script src="../src/renderer/ui/update-modal.js"></script>
+<script>
+    const VERSION = "1.0.10", HUGIN_ICON = "data:image/png;base64,", BASE_CSS = "";
+    const state = {}, stores = { selectedChannel: { getVoiceChannelId: () => null } };
+    const streamFrames = new Map(), releasingStreamFrames = new Set();
+    const voiceChannelId = () => state.channelId || null;
+    const calls = [], messages = []; let progress, safetyRequest, finishDownload;
+    const available = () => ({ ok: true, available: true, notify: true, release: { tag: "v1.0.11", name: "New release",
+        notes: '<img src="x" onerror="window.RELEASE_EXECUTED=true">\nRelease notes' } });
+    const native = {
+        update: async request => { calls.push(request); if (request.action === "check") return available(); return { ok: true }; },
+        onUpdateProgress: fn => { progress = fn; }, onUpdateSafetyRequest: fn => { safetyRequest = fn; }, updateSafetyReply() {}
+    };
+    function mountShadow(css) {
+        const host = document.createElement("div"); document.body.append(host); const root = host.attachShadow({ mode: "open" });
+        const style = document.createElement("style"); style.textContent = css; root.append(style); return { host, root };
+    }
+    function showDiagnosticStatus(text) { messages.push(text); }
+    function whenDiscordMounted() { return new Promise(() => {}); }
+    const passed = [], assert = (value, message) => { if (!value) throw new Error(message); };
+    async function tests() {
+        state.channelId = "in-call";
+        await checkHuginUpdates();
+        assert(updateBanner && !updateModal, "Automatic check interrupted an active call with a modal");
+        passed.push("An active call receives a discreet banner instead of a modal");
+        document.getElementById("origin").focus();
+        await checkHuginUpdates(true);
+        assert(updateModal && !updateBanner, "Manual check did not open update details");
+        const root = updateModal.host.shadowRoot;
+        assert(root.querySelector(".update-notes").textContent.includes("<img"), "Release notes were not preserved as text");
+        assert(!root.querySelector(".update-notes img") && !window.RELEASE_EXECUTED, "Release HTML was executed");
+        passed.push("Manual details show local branding and untrusted release notes as plain text");
+
+        native.update = request => {
+            calls.push(request);
+            if (request.action === "download") return new Promise(resolve => { finishDownload = resolve; });
+            return Promise.resolve({ ok: true });
+        };
+        const download = performUpdate();
+        await performUpdate();
+        assert(calls.filter(call => call.action === "download").length === 1, "Repeated clicks duplicated download");
+        assert(updateModal.primary.disabled, "Download action stayed enabled while busy");
+        finishDownload({ ok: true }); await download;
+        assert(updateInfo.prepared && updateModal.primary.disabled, "A prepared update could restart an active call");
+        assert(updateModal.status.textContent.includes("Encerre a chamada"), "Missing deferred installation feedback");
+        passed.push("Downloads are coalesced and installation remains blocked during a call");
+
+        state.channelId = null;
+        streamFrames.set("parked", {}); refreshUpdateModal();
+        assert(updateModal.primary.disabled, "A retained player did not block installation");
+        streamFrames.clear(); releasingStreamFrames.add({}); refreshUpdateModal();
+        assert(updateModal.primary.disabled, "A releasing player did not block installation");
+        releasingStreamFrames.clear(); stores.selectedChannel = null; refreshUpdateModal();
+        assert(updateModal.primary.disabled, "Unknown voice state allowed installation");
+        stores.selectedChannel = { getVoiceChannelId: () => null }; refreshUpdateModal();
+        assert(!updateModal.primary.disabled && updateModal.primary.textContent === "Reiniciar e atualizar", "Idle installation remained blocked");
+        passed.push("Unknown calls and active or releasing players fail closed; idle state enables explicit restart");
+
+        const first = root.querySelector(".update-notes"); updateModal.primary.focus();
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+        assert(root.activeElement === first, "Tab escaped the modal");
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+        assert(!updateModal && document.activeElement.id === "origin", "Escape failed to restore focus");
+        assert(calls.some(call => call.action === "later"), "Dismissal was not persisted");
+        passed.push("Keyboard focus is trapped and Escape postpones the release with focus restoration");
+
+        openUpdateModal();
+        native.update = async () => ({ ok: false, reason: "operation_failed", detail: "Checksum mismatch" });
+        await performUpdate();
+        assert(updateModal.status.textContent.includes("Checksum mismatch") && !updateUIBusy, "Failure lacked feedback or prevented retry");
+        passed.push("Update failures remain visible and release the action for retry");
+
+        watchUpdates(); progress({ phase: "downloading", done: 50, total: 100 });
+        assert(updateModal.progress.value === 50 && !updateModal.progress.hidden, "Real progress was not rendered");
+        let reply; native.updateSafetyReply = (token, safety) => { reply = { token, safety }; };
+        safetyRequest("nonce"); assert(reply.token === "nonce" && reply.safety.idle, "Fresh safety request was not answered");
+        passed.push("Progress and fresh safety replies are connected to the preload bridge");
+    }
+    tests().then(() => { const out = document.getElementById("result"); out.dataset.status = "pass"; out.textContent = passed.join("\n") + "\nPASS: " + passed.length + " scenarios"; })
+        .catch(error => { const out = document.getElementById("result"); out.dataset.status = "fail"; out.textContent = passed.join("\n") + "\n" + error.stack; })
+        .finally(() => { closeUpdateModal(); dismissUpdateBanner(); });
+</script>

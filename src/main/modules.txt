@@ -19,5 +19,6 @@ views/overlay.js
 views/controls.js
 broadcast/live-controls.js
 views/detach.js
+core/updates.js
 discord/window-patch.js
 discord/handoff.js

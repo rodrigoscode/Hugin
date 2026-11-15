@@ -31,19 +31,27 @@ jobs:
       - name: Test Go packages
         run: go test ./...
 
-      - name: Test capture isolation and diagnostic contracts
-        run: node --test tools/test-capture.cjs tools/test-diagnostics.cjs
+      - name: Test capture isolation, diagnostics and update contracts
+        run: node --test tools/test-capture.cjs tools/test-diagnostics.cjs tools/test-updates.cjs
 
-      - name: Test stage, playback and diagnostics UI in Edge
+      - name: Test stage, playback, diagnostics and update UI in Edge
         run: node tools/run-stage-tests.cjs
 
       - name: Build and validate executable
         shell: pwsh
         run: ./build.ps1
 
+      - name: Generate installer checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -LiteralPath dist/Hugin.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  Hugin.exe" | Set-Content -LiteralPath dist/checksums.txt -Encoding ascii
+
       - name: Upload validated executable
         uses: actions/upload-artifact@v4
         with:
           name: hugin-windows
-          path: dist/Hugin.exe
+          path: |
+            dist/Hugin.exe
+            dist/checksums.txt
           if-no-files-found: error

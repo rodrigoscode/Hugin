@@ -10,10 +10,13 @@ package main
 
 import (
 	"bufio"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"hugin/internal/version"
 )
 
 type target struct {
@@ -73,7 +76,15 @@ func build(t target) error {
 		parts = append(parts, string(data))
 	}
 
-	bundle := t.header + strings.Join(parts, "\n") + t.footer
+	constants := fmt.Sprintf("const HUGIN_VERSION = %q;\n", version.Version)
+	if strings.Contains(t.manifest, "renderer") {
+		icon, err := os.ReadFile("assets/icon.png")
+		if err != nil {
+			return err
+		}
+		constants += fmt.Sprintf("const HUGIN_ICON = %q;\n", "data:image/png;base64,"+base64.StdEncoding.EncodeToString(icon))
+	}
+	bundle := t.header + constants + strings.Join(parts, "\n") + t.footer
 	if err := os.MkdirAll(filepath.Dir(t.output), 0o755); err != nil {
 		return err
 	}
@@ -85,6 +96,10 @@ func build(t target) error {
 }
 
 func main() {
+	if os.Getenv("GITHUB_REF_TYPE") == "tag" && os.Getenv("GITHUB_REF_NAME") != "v"+version.Version {
+		fmt.Fprintln(os.Stderr, "bundle: release tag must match v"+version.Version)
+		os.Exit(1)
+	}
 	for _, t := range targets {
 		if err := build(t); err != nil {
 			fmt.Fprintln(os.Stderr, "bundle:", err)

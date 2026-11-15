@@ -51,6 +51,9 @@ func run() (code int) {
 }
 
 func main() {
+	if len(os.Args) >= 2 && os.Args[1] == "update" {
+		os.Exit(cli.RunUpdate(os.Args[2:], loadPayload, loadSounds, loadFonts))
+	}
 
 	if len(os.Args) >= 2 && os.Args[1] == cli.TimerResolutionCommand {
 		os.Exit(cli.RunTimerResolution(os.Args[2:]))

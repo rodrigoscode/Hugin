@@ -52,6 +52,7 @@ function boot() {
     watchLabels();
     watchVoiceChannel();
     watchStreamFrames();
+    watchUpdates();
     watchCallTiles();
     addEventListener("resize", syncViewBounds);
 

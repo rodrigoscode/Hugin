@@ -63,6 +63,8 @@ function fanout(channel) {
 
 const endedListeners = fanout("hugin:streamEnded");
 const videoCountListeners = fanout("hugin:videoCount");
+const updateProgressListeners = fanout("hugin:updateProgress");
+const updateSafetyListeners = fanout("hugin:updateSafetyRequest");
 
 /**
  * The config passed in the process arguments, available synchronously before Discord's bundle runs.
@@ -89,6 +91,10 @@ const api = {
     copy: text => ipcRenderer.invoke("hugin:copy", text),
     diagnosticEvent: event => ipcRenderer.send("hugin:diagnosticEvent", event),
     copyDiagnostics: snapshot => ipcRenderer.invoke("hugin:copyDiagnostics", snapshot),
+    update: request => ipcRenderer.invoke("hugin:update", request),
+    updateSafetyReply: (token, safety) => ipcRenderer.send("hugin:updateSafetyReply", token, safety),
+    onUpdateProgress: fn => { updateProgressListeners.add(fn); return () => updateProgressListeners.delete(fn); },
+    onUpdateSafetyRequest: fn => { updateSafetyListeners.add(fn); return () => updateSafetyListeners.delete(fn); },
     attachView: request => ipcRenderer.invoke("hugin:attachView", request),
     setViewBounds: bounds => ipcRenderer.invoke("hugin:setViewBounds", bounds),
     setViewVolume: request => ipcRenderer.invoke("hugin:setViewVolume", request),

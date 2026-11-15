@@ -104,9 +104,10 @@ function openDiagnosticMenu(point, anchor = null) {
     menu.setAttribute("aria-label", "Diagnóstico do Hugin");
     root.appendChild(menu);
     const button = appendDiagnosticMenuItem(menu, closeDiagnosticMenu);
+    if (typeof appendUpdateMenuItem === "function") appendUpdateMenuItem(menu, closeDiagnosticMenu);
     const box = anchor?.getBoundingClientRect();
     menu.style.left = Math.max(8, Math.min(point?.x ?? box?.left ?? 8, innerWidth - 240)) + "px";
-    menu.style.top = Math.max(8, Math.min(point?.y ?? box?.bottom ?? 8, innerHeight - 60)) + "px";
+    menu.style.top = Math.max(8, Math.min(point?.y ?? box?.bottom ?? 8, innerHeight - 100)) + "px";
     const outside = event => { if (!event.composedPath().includes(host)) closeDiagnosticMenu(); };
     const onKey = event => {
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeDiagnosticMenu(); anchor?.focus(); }

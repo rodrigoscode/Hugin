@@ -17,6 +17,7 @@ import (
 // as `name(` without being declared in the file.
 var globals = map[string]bool{
 	"require": true, "setTimeout": true, "setInterval": true, "clearTimeout": true, "clearInterval": true,
+	"setImmediate": true, "clearImmediate": true,
 	"fetch": true, "atob": true, "btoa": true, "parseInt": true, "parseFloat": true, "isNaN": true, "isFinite": true,
 	"encodeURIComponent": true, "decodeURIComponent": true, "encodeURI": true, "decodeURI": true,
 	"structuredClone": true, "queueMicrotask": true, "requestAnimationFrame": true, "cancelAnimationFrame": true,

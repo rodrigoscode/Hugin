@@ -3,7 +3,7 @@ const { pathToFileURL } = require("node:url");
 const path = require("node:path");
 
 const browser = process.env.HUGIN_TEST_BROWSER || "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
-for (const suite of ["test-stage.html", "test-playback.html", "test-diagnostic-ui.html"]) {
+for (const suite of ["test-stage.html", "test-playback.html", "test-diagnostic-ui.html", "test-update-ui.html"]) {
     const run = spawnSync(browser, [
         "--headless", "--disable-gpu", "--no-first-run", "--allow-file-access-from-files",
         "--virtual-time-budget=10000", "--dump-dom",
