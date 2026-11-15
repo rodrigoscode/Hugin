@@ -21,6 +21,7 @@ function stopSystemAudio() {
     if (!systemAudio) return;
     const child = systemAudio;
     systemAudio = null;
+    recordDiagnostic("audio.stopped", child.huginDiagnosticContext ?? diagnosticCaptureContext());
 
     try {
         child.kill();
@@ -33,7 +34,11 @@ function stopSystemAudio() {
  */
 function startSystemAudio(target) {
     stopSystemAudio();
-    if (!target || target.isDestroyed() || !existsSync(HELPER_EXE)) return false;
+    const context = diagnosticCaptureContext();
+    if (!target || target.isDestroyed() || !existsSync(HELPER_EXE)) {
+        recordDiagnostic("audio.failed", { ...context, reason: "helper_missing" });
+        return false;
+    }
 
     const child = spawn(HELPER_EXE, ["capture-audio", String(process.pid)], {
         windowsHide: true,
@@ -41,6 +46,8 @@ function startSystemAudio(target) {
     });
 
     systemAudio = child;
+    child.huginDiagnosticContext = context;
+    child.on("spawn", () => recordDiagnostic("audio.started", context));
     let carry = Buffer.alloc(0);
 
     child.stdout.on("data", chunk => {
@@ -53,9 +60,14 @@ function startSystemAudio(target) {
 
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", text => log("system audio:", String(text).trim()));
-    child.on("error", err => log("system audio failed:", String(err)));
+    child.on("error", err => {
+        if (systemAudio === child) systemAudio = null;
+        recordDiagnostic("audio.failed", { ...context, reason: "helper_failed" });
+        log("system audio failed:", String(err));
+    });
 
     child.on("exit", code => {
+        recordDiagnostic("audio.exited", { ...context, exitCode: code });
         if (systemAudio === child) systemAudio = null;
         if (DEBUG_MODE) log("system audio helper exited:", code);
     });

@@ -57,8 +57,11 @@ electron.ipcMain.handle("hugin:setBroadcastQuality", async (_e, request) => {
             true
         );
         log("live quality:", JSON.stringify(qualityArgs), "->", JSON.stringify(result));
+        recordDiagnostic("quality.changed", { ...diagnosticCaptureContext(), ...qualityArgs });
+        if (result?.captureError || result?.error) recordDiagnostic("quality.failed", { ...diagnosticCaptureContext(), reason: "quality_failed" });
         return result;
     } catch (err) {
+        recordDiagnostic("quality.failed", { ...diagnosticCaptureContext(), reason: "quality_failed" });
         log("live quality failed:", String(err));
         return null;
     }
@@ -163,8 +166,11 @@ electron.ipcMain.handle("hugin:setBroadcastAudio", async (_e, request) => {
     try {
         const trackCount = await win.webContents.executeJavaScript(`(${BROADCAST_AUDIO_SCRIPT})(${enable})`, true);
         log("live broadcast audio:", enable ? "on" : "off", "tracks:", trackCount);
+        diagnosticCapture.audioRequested = enable;
+        recordDiagnostic("audio.changed", { ...diagnosticCaptureContext(), audioRequested: enable, count: trackCount });
         return trackCount;
     } catch (err) {
+        recordDiagnostic("audio.failed", { ...diagnosticCaptureContext(), reason: "audio_failed" });
         log("broadcast audio failed:", String(err));
         return null;
     }

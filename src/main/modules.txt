@@ -1,5 +1,7 @@
 core/paths.js
 core/log.js
+../shared/diagnostics.js
+core/diagnostics.js
 capture/system-audio.js
 ipc/sources.js
 ipc/assets.js

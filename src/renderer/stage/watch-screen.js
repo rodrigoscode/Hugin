@@ -379,7 +379,10 @@ const STAGE_EVENTS = new Set(["end-view-connection", "new-video-track-added", "v
 /**
  * Reloads a stage iframe for real: assigning the same src does not always navigate again.
  */
-function reloadStageFrame(frame) {
+function reloadStageFrame(frame, reason = "requested") {
+    const entry = [...streamFrames.values()].find(value => value.frame === frame);
+    if (entry) entry.playing = false;
+    recordDiagnostic("player.reload", { player: entry?.diagnosticId, reason });
     const url = frame.src;
     frame.huginUuid = null;
     frame.src = "about:blank";
@@ -399,7 +402,7 @@ function reloadStuckStage(frame, streamId) {
     if (!streamers().some(entry => entry.key === watchScreen.item.key)) return;
     log("stage: still loading, reloading", String(streamId).slice(0, 12));
     watchScreen.placeholderSince = Date.now();
-    reloadStageFrame(frame);
+    reloadStageFrame(frame, "loading_stuck");
 }
 
 function vdoVideoStarted(data, streamId) {

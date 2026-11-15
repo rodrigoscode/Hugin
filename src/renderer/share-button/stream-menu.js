@@ -170,6 +170,7 @@ function openStreamMenu(anchor, options = {}) {
     shell.innerHTML = CAPTURED_STREAM_MENU_HTML;
     const node = shell.firstElementChild;
     root.appendChild(node);
+    appendDiagnosticMenuItem(node, closeStreamMenu);
     const rows = [...node.querySelectorAll('[class*="item_c1e9c4"]')];
     const byText = text => rows.find(row => (row.textContent || "").trim().startsWith(text));
     const changeRow = byText("Alterar a Transmissão");

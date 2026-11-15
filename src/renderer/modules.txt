@@ -1,4 +1,6 @@
 core/config.js
+../shared/diagnostics.js
+core/diagnostics.js
 captures/typography.capture.js
 captures/share-picker.capture.js
 captures/stream-menu.capture.js
@@ -20,6 +22,7 @@ identity/roster.js
 vdo/urls.js
 core/state.js
 ui/foundation.js
+ui/diagnostics.js
 stage/view-bounds.js
 ui/gear-animation.js
 ui/share-quality.js

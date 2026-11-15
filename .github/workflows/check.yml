@@ -31,10 +31,10 @@ jobs:
       - name: Test Go packages
         run: go test ./...
 
-      - name: Test capture isolation
-        run: node --test tools/test-capture.cjs
+      - name: Test capture isolation and diagnostic contracts
+        run: node --test tools/test-capture.cjs tools/test-diagnostics.cjs
 
-      - name: Test stage and playback in Edge
+      - name: Test stage, playback and diagnostics UI in Edge
         run: node tools/run-stage-tests.cjs
 
       - name: Build and validate executable

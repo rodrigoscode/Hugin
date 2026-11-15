@@ -40,6 +40,7 @@ for (const role of ["identify", "announce"]) {
 function captureSession(role, sources) {
     let handler;
     const enumerations = [];
+    const diagnostics = [];
     const session = {
         setUserAgent() {},
         setPermissionRequestHandler() {},
@@ -59,6 +60,9 @@ function captureSession(role, sources) {
             }
         },
         roleForWebContents: () => role,
+        diagnosticCapture: { source: "screen" },
+        diagnosticCaptureContext: () => ({}),
+        recordDiagnostic: (name, fields) => diagnostics.push({ name, fields }),
         watchSharedWindow() {},
         log() {}
     });
@@ -66,6 +70,7 @@ function captureSession(role, sources) {
     context.prepareSession();
     return {
         enumerations,
+        diagnostics,
         request: async () => {
             const replies = [];
             await handler({ frame: {} }, response => replies.push(response));
@@ -93,9 +98,15 @@ test("broadcast resolves only the chosen source without generating thumbnails", 
     assert.equal(options.thumbnailSize.width, 0);
     assert.equal(options.thumbnailSize.height, 0);
     assert.equal(options.fetchWindowIcons, false);
+    assert.equal(session.diagnostics[0].name, "capture.resolved");
+    assert.equal(session.diagnostics[0].fields.source, "screen");
+    assert.equal(session.diagnostics[0].fields.audioMode, "none");
+    assert.equal(JSON.stringify(session.diagnostics).includes(chosen.name), false);
 });
 
 test("a missing capture source does not silently select another screen", async () => {
     const session = captureSession("broadcast", [{ id: "screen:2:0" }]);
     assert.deepEqual(Object.keys(await session.request()), []);
+    assert.equal(session.diagnostics[0].name, "capture.failed");
+    assert.equal(session.diagnostics[0].fields.reason, "missing_source");
 });

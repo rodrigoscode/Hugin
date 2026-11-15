@@ -56,6 +56,7 @@ function replaceShareButton(original) {
     replacement.setAttribute("aria-label", "Compartilhar tela (P2P)");
     replacement.title = "Compartilhar tela por P2P";
     drawIcon(replacement);
+    bindDiagnosticShortcut(replacement);
 
     replacement.addEventListener("click", event => {
         event.preventDefault();
@@ -113,6 +114,7 @@ function openNativePicker(element) {
 }
 
 function hijackShare(element) {
+    bindDiagnosticShortcut(element);
     if (element.__huginHijacked) return;
     element.__huginHijacked = true;
 
@@ -273,6 +275,7 @@ function syncCallShareButton() {
             button.type = "button";
             button.className = anchor.className;
             button.setAttribute("data-hugin-call-share", "");
+            bindDiagnosticShortcut(button);
             button.addEventListener("click", event => {
                 event.preventDefault();
                 event.stopPropagation();

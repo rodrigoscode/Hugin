@@ -61,6 +61,7 @@ const log = (...args) => {
 addEventListener(
     "error",
     event => {
+        recordDiagnostic("runtime.error", { reason: "unhandled_error", errorType: event.error?.name, line: event.lineno, column: event.colno });
         native.log(
             "[main world error]",
             String(event.message),
@@ -74,6 +75,7 @@ addEventListener(
 addEventListener(
     "unhandledrejection",
     event => {
+        recordDiagnostic("runtime.error", { reason: "unhandled_rejection", errorType: event.reason?.name });
         native.log("[unhandled rejection]", String(event.reason?.stack ?? event.reason).slice(0, 2000));
     },
     true

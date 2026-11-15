@@ -5,6 +5,7 @@
 
 let streamFrame = null;
 const streamFrames = new Map();
+const releasingStreamFrames = new Set();
 let frameParking = null;
 let navigationPath = location.pathname;
 
@@ -78,6 +79,7 @@ function placeStreamFrame(parent, ref, style) {
     try {
         parent.moveBefore(frame, ref?.parentNode === parent ? ref : null);
     } catch (err) {
+        recordDiagnostic("player.move_failed", { player: streamFrame?.diagnosticId, reason: "move_failed" });
         log("stream frame move failed:", String(err));
         return false;
     }
@@ -100,12 +102,14 @@ function takeStreamFrame(parent, ref, item, style, options = {}) {
 
     const mine = Boolean(item.mine);
     const key = streamFrameKey(streamId, mine);
+    const surface = parent.closest?.("[data-hugin-watch-slot]") ? "grid" : style === PIP_FRAME_STYLE ? "pip" : "stage";
     if (options.fresh) dropStreamFrame(streamId, mine);
     const current = streamFrames.get(key);
 
     if (current) setActiveStreamFrame(current);
 
     if (current && current.streamId === streamId && current.mine === mine && placeStreamFrame(parent, ref, style)) {
+        recordDiagnostic("player.reused", { player: current.diagnosticId, surface });
         return {
             frame: current.frame,
             playing: current.playing
@@ -127,11 +131,13 @@ function takeStreamFrame(parent, ref, item, style, options = {}) {
         frame,
         streamId,
         mine,
+        diagnosticId: "player-" + (++diagnosticPlayerSequence).toString(36),
         playing: false
     };
 
     streamFrames.set(key, entry);
     setActiveStreamFrame(entry);
+    recordDiagnostic("player.created", { player: entry.diagnosticId, mine, surface });
 
     return {
         frame,
@@ -157,6 +163,7 @@ function parkStreamFrame(streamId = null, mine = null) {
     const previous = streamFrame;
     setActiveStreamFrame(current);
     if (placeStreamFrame(frameParking, null, PIP_FRAME_STYLE)) {
+        recordDiagnostic("player.parked", { player: current.diagnosticId });
         setActiveStreamFrame(previous);
         return true;
     }
@@ -195,6 +202,8 @@ function releaseStreamFrame(entry) {
     const frame = entry.frame;
     if (!frame || frame.dataset.huginDropping === "1") return;
     frame.dataset.huginDropping = "1";
+    releasingStreamFrames.add(entry);
+    recordDiagnostic("player.releasing", { player: entry.diagnosticId });
     clearStreamFrameBindings(frame);
 
     if (frame.isConnected && canMoveFrames()) {
@@ -213,7 +222,7 @@ function releaseStreamFrame(entry) {
     const silenced = silenceStreamFrame(entry);
     let finished = false;
 
-    const finish = () => {
+    const finish = (reason = "closed") => {
         if (finished) return;
         finished = true;
 
@@ -222,11 +231,13 @@ function releaseStreamFrame(entry) {
         } catch {}
 
         frame.remove();
+        releasingStreamFrames.delete(entry);
+        recordDiagnostic("player.released", { player: entry.diagnosticId, reason });
     };
 
     if (silenced?.finally) {
-        silenced.finally(finish);
-        setTimeout(finish, 250);
+        silenced.finally(() => finish());
+        setTimeout(() => finish("timeout"), 250);
     } else finish();
 }
 
@@ -261,8 +272,13 @@ function trackStreamFrame(event) {
     const current = [...streamFrames.values()].find(entry => event.source === entry.frame.contentWindow);
     if (!current) return;
     const data = event.data;
-    if (vdoVideoStarted(data, current.streamId)) current.playing = true;
-    else if (data?.action === "end-view-connection") current.playing = false;
+    if (vdoVideoStarted(data, current.streamId)) {
+        if (!current.playing) recordDiagnostic("player.video", { player: current.diagnosticId });
+        current.playing = true;
+    } else if (data?.action === "end-view-connection") {
+        recordDiagnostic("player.connection_ended", { player: current.diagnosticId, reason: "connection_ended" });
+        current.playing = false;
+    }
 }
 
 /**

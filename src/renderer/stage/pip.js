@@ -36,6 +36,11 @@ function openPip(item) {
     }
 
     const { host, shell, pipWindow, surface } = parts;
+    shell.addEventListener("contextmenu", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        openDiagnosticMenu({ x: event.clientX, y: event.clientY });
+    });
     bindPipButtons(shell, item);
     const video = attachPipVideo(surface, item);
 
@@ -61,6 +66,7 @@ function openPip(item) {
         unmountPosition: position.unmount,
         stopIdle
     };
+    recordDiagnostic("playback.mounted", { surface: "pip", count: 1 });
 
     log("PiP opened:", item.mine ? "own" : item.label);
 }
@@ -253,13 +259,18 @@ function watchPipStream(item) {
  * With keepFrame the stream's iframe is parked for the stage; otherwise it is dropped.
  */
 function closePip(options = {}) {
-    if (!options.keepFrame) pendingOpen++;
+    if (!options.keepFrame) {
+        if (pendingWatchOperation) recordDiagnostic("playback.cancel", { operation: pendingWatchOperation, reason: "cancelled" });
+        pendingWatchOperation = null;
+        pendingOpen++;
+    }
     if (!pip) {
         if (!options.keepFrame) dropStreamFrame();
         return;
     }
 
     clearInterval(pip.watcher);
+    recordDiagnostic("playback.closed", { surface: "pip", reason: options.keepFrame ? "navigation" : "closed" });
     pip.stopIdle();
     pip.unmountPosition();
     if (streamMenu && pip.host.shadowRoot?.contains(streamMenu.anchor)) closeStreamMenu();

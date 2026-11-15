@@ -28,12 +28,16 @@ const PUBLISHING_ROLES = new Set(["broadcast", "identify", "announce"]);
 function destroyView(role, { notifyViewers = false } = {}) {
     const win = views.get(role);
     if (!win) return;
+    recordDiagnostic("view.closing", { role, reason: "requested" });
+    diagnosticClosingViews.set(win, role);
+    win.once("closed", () => diagnosticClosingViews.delete(win));
     views.delete(role);
     lastRect.delete(role);
 
     const destroyNow = () => {
         try {
             if (!win.isDestroyed()) win.destroy();
+            if (win.isDestroyed()) diagnosticClosingViews.delete(win);
         } catch (err) {
             log(`error closing window "${role}":`, String(err));
         }

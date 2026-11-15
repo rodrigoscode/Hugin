@@ -16,6 +16,7 @@ electron.ipcMain.handle("hugin:detachView", (_e, request) => {
             });
 
     if (!role || role === "broadcast") {
+        Object.assign(diagnosticCapture, { status: "idle", source: "none", audioRequested: false, audioMode: "none" });
         pending = null;
         honorTimerResolution(false);
         stopWindowWatcher();
@@ -33,6 +34,8 @@ electron.ipcMain.handle("hugin:detachView", (_e, request) => {
 electron.ipcMain.on("hugin:broadcastSourceEnded", event => {
     const win = views.get("broadcast");
     if (!win || win.isDestroyed() || win.webContents.id !== event.sender.id) return;
+    diagnosticCapture.status = "ended";
+    recordDiagnostic("capture.ended", { ...diagnosticCaptureContext(), reason: "source_ended" });
     log("broadcast source ended (application closed?)");
     notifyEnded("source-ended");
 });

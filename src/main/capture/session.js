@@ -33,15 +33,27 @@ function prepareSession() {
                 fetchWindowIcons: false
             });
             const source = sources.find(s => s.id === pending.sourceId);
-            if (!source) return callback({});
+            if (!source) {
+                diagnosticCapture.status = "failed";
+                recordDiagnostic("capture.failed", { ...diagnosticCaptureContext(), reason: "missing_source" });
+                return callback({});
+            }
+            const resolved = audioMode => {
+                diagnosticCapture.status = "resolved";
+                diagnosticCapture.audioMode = audioMode;
+                recordDiagnostic("capture.resolved", { ...diagnosticCaptureContext(), source: diagnosticCapture.source, audioMode });
+            };
             log("handing source to getDisplayMedia:", source.name);
             watchSharedWindow(source.id);
-            if (!pending.audio)
+            if (!pending.audio) {
+                resolved("none");
                 return callback({
                     video: source
                 });
+            }
             const owner = await windowOwner(source.id);
             if (owner && owner.name.toLowerCase() === "explorer.exe") {
+                resolved("none");
                 log("broadcast audio: none (explorer.exe window)");
                 return callback({
                     video: source
@@ -49,6 +61,7 @@ function prepareSession() {
             }
             if (!owner && pending.systemAudio) {
                 const started = startSystemAudio(electron.webContents.fromFrame(request.frame));
+                resolved(started ? "system_excluding_discord" : "none");
                 log("broadcast audio:", started ? "system audio without Discord (Hugin.exe)" : "none (Hugin.exe missing)");
                 return callback({
                     video: source
@@ -57,12 +70,15 @@ function prepareSession() {
 
             const windowAudio = processLoopbackSupported() ? `applicationLoopback:${owner?.pid}` : "loopback";
             const audio = owner ? windowAudio : "loopback";
+            resolved(owner && processLoopbackSupported() ? "application" : "system_mix");
             log("broadcast audio:", audio, owner?.name ? "(" + owner.name + ")" : "");
             callback({
                 video: source,
                 audio
             });
         } catch (err) {
+            diagnosticCapture.status = "failed";
+            recordDiagnostic("capture.failed", { ...diagnosticCaptureContext(), reason: "capture_failed", errorType: err?.name });
             log("failed to resolve source:", String(err));
             callback({});
         }

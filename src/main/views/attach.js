@@ -8,6 +8,12 @@ electron.ipcMain.handle("hugin:attachView", async (_e, request) => {
     if (!mainWindow || mainWindow.isDestroyed()) throw new Error("main window unavailable");
 
     if (role === "broadcast") {
+        Object.assign(diagnosticCapture, {
+            run: diagnosticAlias(request.diagnosticContext?.run, "run"),
+            operation: diagnosticAlias(request.diagnosticContext?.operation, "operation"),
+            status: "requested", source: sourceId ? (String(sourceId).startsWith("screen:") ? "screen" : "window") : "camera",
+            audioRequested: Boolean(audio), audioMode: "none"
+        });
         pending = sourceId
             ? {
                   sourceId,
@@ -60,19 +66,31 @@ electron.ipcMain.handle("hugin:attachView", async (_e, request) => {
     });
 
     views.set(role, win);
+    recordDiagnostic("view.created", { role });
     win.setMenuBarVisibility(false);
     allowClose(win);
     win.webContents.setAudioMuted(true);
 
     win.on("closed", () => {
+        recordDiagnostic("view.closed", { role, reason: "closed" });
         if (views.get(role) === win) views.delete(role);
     });
+    win.webContents.on("did-fail-load", (_event, code) => recordDiagnostic("view.failed", { role, reason: "load_failed", code }));
+    win.webContents.on("render-process-gone", (_event, details) =>
+        recordDiagnostic("view.failed", { role, reason: "process_gone", processReason: details?.reason }));
 
     if (visible !== false && bounds) applyViewBounds(role, bounds, true);
 
-    await win.loadURL(url, {
-        userAgent: CHROME_UA
-    });
+    try {
+        await win.loadURL(url, {
+            userAgent: CHROME_UA
+        });
+        recordDiagnostic("view.loaded", { role });
+    } catch (err) {
+        if (role === "broadcast") diagnosticCapture.status = "failed";
+        recordDiagnostic("view.failed", { role, reason: "load_failed" });
+        throw err;
+    }
 
     log(`window "${role}" loaded`, visible === false ? "(hidden)" : "(in panel)");
     if (DEBUG_MODE) setTimeout(() => probeView(role), 6000);

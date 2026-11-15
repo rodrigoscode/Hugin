@@ -140,10 +140,15 @@ async function beginBroadcast(choice) {
     };
 
     const withAudio = Boolean(config.captureAudio && !choice.muteAudio);
+    const operation = diagnosticOperation();
+    recordDiagnostic("broadcast.requested", {
+        operation, source: source.kind, height: state.resolution, fps: state.fps, audioRequested: withAudio
+    });
 
     try {
         await native.attachView({
             role: "broadcast",
+            diagnosticContext: { run: diagnosticRun, operation },
             url: pushUrl(
                 state.room,
                 streamId,
@@ -160,11 +165,13 @@ async function beginBroadcast(choice) {
             audio: withAudio
         });
     } catch (err) {
+        recordDiagnostic("broadcast.failed", { operation, reason: "capture_failed", errorType: err?.name });
         log("attachView(broadcast) failed:", err);
         return;
     }
 
     state.broadcasting = true;
+    recordDiagnostic("broadcast.started", { operation });
     state.broadcastAudio = withAudio;
     state.lastChoice = choice;
     if (!wasBroadcasting) playSound("start", "you started broadcasting");
@@ -199,6 +206,7 @@ async function stopBroadcast() {
     } catch {}
 
     state.broadcasting = false;
+    if (wasLive) recordDiagnostic("broadcast.stopped", { reason: "requested" });
     if (wasLive) playSound("stop", "you stopped broadcasting");
     state.pushId = null;
     state.isFullScreenShare = false;

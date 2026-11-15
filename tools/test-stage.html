@@ -8,6 +8,9 @@
 <div id="fixture"></div>
 <pre id="result" data-status="running">Running</pre>
 <script src="../src/renderer/captures/stage.capture.js"></script>
+<script src="../src/shared/diagnostics.js"></script>
+<script src="../src/renderer/core/diagnostics.js"></script>
+<script src="../src/renderer/ui/diagnostics.js"></script>
 <script src="../src/renderer/stage/watch-screen.js"></script>
 <script src="../src/renderer/stage/stream-frame.js"></script>
 <script src="../src/renderer/stage/mount.js"></script>
@@ -16,6 +19,7 @@
 <script>
     // Exercise real DOM selection, stage mounting, CSS hiding and teardown. Media/IPC are isolated.
     const native = { overlay: () => Promise.resolve() };
+    const VERSION = "1.0.10";
     const state = {
         userId: "123", userName: "Test", channelName: "Voice", avatarUrl: "", pushId: "own",
         streams: new Map(), resolution: "720", fps: "30", broadcasting: true, channelId: "111:222"

@@ -1,0 +1,129 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Hugin diagnostic UI regression tests</title>
+<div id="fixture"><button id="share">Share</button></div>
+<pre id="result" data-status="running">Running</pre>
+<script src="../src/shared/diagnostics.js"></script>
+<script src="../src/renderer/core/diagnostics.js"></script>
+<script src="../src/renderer/ui/diagnostics.js"></script>
+<script src="../src/renderer/captures/stream-menu.capture.js"></script>
+<script src="../src/renderer/captures/stage-menu.capture.js"></script>
+<script src="../src/renderer/stage/watch-screen.js"></script>
+<script src="../src/renderer/stage/context-menu.js"></script>
+<script src="../src/renderer/share-button/stream-menu.js"></script>
+<script src="../src/renderer/share-button/share-button.js"></script>
+<script>
+    const native = {};
+    const VERSION = "1.0.10", BASE_CSS = "";
+    const state = { broadcasting: false, streamVolumes: new Map(), streamMuted: new Map(), resolution: 720, fps: 30, volume: 1,
+        source: { name: "PRIVATE_WINDOW_TITLE" }, roomPassword: "PRIVATE_ROOM_PASSWORD" };
+    const config = { captureAudio: true };
+    const streamFrames = new Map(), releasingStreamFrames = new Set();
+    const pip = null, frameParking = null;
+    const ICON = { discordStopShare: () => "<svg></svg>", discordShareScreen: () => "<svg></svg>" };
+    const log = () => {};
+    let sourceEnumerations = 0;
+    const openShareModal = () => { sourceEnumerations++; };
+    function mountShadow() {
+        const host = document.createElement("div");
+        document.body.appendChild(host);
+        return { host, root: host.attachShadow({ mode: "open" }) };
+    }
+    const passed = [];
+    const assert = (condition, message) => { if (!condition) throw new Error(message); };
+    const statusText = () => diagnosticStatus?.node.textContent ?? "";
+    async function tests() {
+        const original = document.getElementById("share");
+        replaceShareButton(original);
+        const button = original.previousElementSibling;
+        let finish, copies = 0, exported;
+        native.copyDiagnostics = snapshot => {
+            copies++; exported = snapshot;
+            return new Promise(resolve => { finish = resolve; });
+        };
+        button.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
+        const action = diagnosticMenu?.host.shadowRoot.querySelector("[data-hugin-diagnostic-action]");
+        assert(action?.textContent === "Copiar diagnóstico", "Idle share button has no diagnostic action");
+        action.click();
+        assert(!diagnosticMenu, "Selecting diagnostics left its menu open");
+        assert(statusText().includes("Coletando"), "Collection feedback is missing");
+        const task = diagnosticCopyTask;
+        assert(copySessionDiagnostic() === task && copies === 1, "Concurrent UI requests duplicated collection");
+        finish({ ok: true });
+        assert(await task, "Successful copy returned failure");
+        assert(statusText() === "Diagnóstico copiado.", "Successful copy has no confirmation");
+        assert(sourceEnumerations === 0, "Copying diagnostics opened capture source enumeration");
+        assert(exported.players.length === 0, "Idle report invented an active player");
+        assert(!JSON.stringify(exported).includes("PRIVATE_"), "Renderer snapshot exposed private application state");
+        passed.push("Idle share button copies a sanitized snapshot without opening capture; concurrent clicks are coalesced");
+
+        button.focus();
+        button.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true, cancelable: true }));
+        assert(diagnosticMenu?.host.shadowRoot.activeElement?.hasAttribute("data-hugin-diagnostic-action"), "Keyboard menu did not focus its action");
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+        assert(!diagnosticMenu && document.activeElement === button, "Escape did not dismiss the menu and restore focus");
+        passed.push("Diagnostic menu supports Shift+F10 and Escape with focus restoration");
+
+        state.broadcasting = true;
+        openStreamMenu(button);
+        const liveAction = streamMenu.host.shadowRoot.querySelector("[data-hugin-diagnostic-action]");
+        assert(liveAction, "Broadcast menu has no diagnostic action");
+        native.copyDiagnostics = () => Promise.resolve({ ok: true, partial: true });
+        liveAction.click();
+        await diagnosticCopyTask;
+        assert(!streamMenu && statusText().includes("coleta parcial"), "Live menu did not report a partial collection");
+        passed.push("Broadcast menu exposes diagnostics and indicates partial collection");
+
+        openViewerMenu({ x: 20, y: 20 });
+        const viewerAction = stageMenu.host.shadowRoot.querySelector("[data-hugin-diagnostic-action]");
+        assert(viewerAction, "Viewer menu has no diagnostic action");
+        native.copyDiagnostics = () => Promise.resolve({ ok: false, reason: "copy_failed" });
+        viewerAction.click();
+        assert(await diagnosticCopyTask === false, "Clipboard failure was reported as success");
+        assert(!stageMenu && statusText().includes("Não foi possível"), "Viewer menu has no copy failure feedback");
+        passed.push("Viewer menu exposes diagnostics and reports clipboard failures");
+
+        native.copyDiagnostics = () => Promise.reject(new Error("IPC unavailable"));
+        assert(await copySessionDiagnostic() === false, "Rejected IPC was reported as success");
+        assert(!diagnosticCopyTask, "Failed request prevented retries");
+        delete native.copyDiagnostics;
+        assert(await copySessionDiagnostic() === false, "Old preload was reported as successful");
+        assert(statusText().includes("Reinicie o Discord"), "Old preload has no actionable feedback");
+        native.copyDiagnostics = () => Promise.resolve({ ok: true });
+        assert(await copySessionDiagnostic(), "Retry after a failed request did not recover");
+        passed.push("Rejected IPC and old preloads fail clearly and allow retry");
+
+        const originalTimer = window.setTimeout;
+        try {
+            window.setTimeout = (callback, ms) => originalTimer(callback, ms === 3000 ? 1 : ms);
+            native.copyDiagnostics = () => new Promise(() => {});
+            assert(await copySessionDiagnostic() === false, "Unresponsive IPC left the collection pending");
+            assert(statusText().includes("demorou demais") && !diagnosticCopyTask, "Timeout has no feedback or prevented retry");
+        } finally { window.setTimeout = originalTimer; }
+        passed.push("Unresponsive IPC times out with feedback and releases the request lock");
+
+        const originalSnapshot = diagnosticPlaybackSnapshot;
+        try {
+            diagnosticPlaybackSnapshot = () => { throw new Error("renderer state unavailable"); };
+            native.copyDiagnostics = snapshot => {
+                assert(snapshot === null, "Failed renderer collection was not represented as missing");
+                return Promise.resolve({ ok: true, partial: true });
+            };
+            assert(await copySessionDiagnostic(), "Failed renderer collection prevented a partial native report");
+            assert(statusText().includes("coleta parcial"), "Partial report was presented as complete");
+        } finally { diagnosticPlaybackSnapshot = originalSnapshot; }
+        passed.push("Renderer collection failures still allow a partial native report");
+    }
+    tests().then(() => {
+        const result = document.getElementById("result");
+        result.dataset.status = "pass";
+        result.textContent = passed.join("\n") + "\nPASS: " + passed.length + " scenarios";
+    }).catch(error => {
+        const result = document.getElementById("result");
+        result.dataset.status = "fail";
+        result.textContent = passed.join("\n") + "\n" + error.stack;
+    }).finally(() => {
+        closeDiagnosticMenu(); closeStreamMenu(); closeStageMenu();
+        if (diagnosticStatus) { clearTimeout(diagnosticStatus.timer); diagnosticStatus.host.remove(); }
+    });
+</script>

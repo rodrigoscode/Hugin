@@ -183,6 +183,7 @@ function openViewerMenu(point, streamId = null) {
     });
 
     drawVolume();
+    appendDiagnosticMenuItem(menu, closeStageMenu);
     placeAtPoint(menu, point);
 
     const onClickOutside = event => {

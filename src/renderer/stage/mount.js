@@ -6,6 +6,10 @@
  * With keepFrame the stream's iframe is parked for the PiP or a new stage; otherwise it is dropped.
  */
 function closeWatchScreen(options = {}) {
+    if (pendingWatchOperation) {
+        recordDiagnostic("playback.cancel", { operation: pendingWatchOperation, reason: "cancelled" });
+        pendingWatchOperation = null;
+    }
     pendingOpen++;
     if (!watchScreen) {
         if (!options.keepFrame) dropAllStreamFrames();
@@ -34,6 +38,7 @@ function closeWatchScreen(options = {}) {
     watchScreen.hostElement?.removeAttribute("data-hugin-host");
     const iframeVideo = watchScreen.frame;
     const frames = watchScreen.frames ?? (iframeVideo ? [iframeVideo] : []);
+    recordDiagnostic("playback.closed", { surface: frames.length > 1 ? "grid" : "stage", reason: options.keepFrame ? "navigation" : "closed" });
     detachStreamFrames(frames, options.keepFrame);
 
     watchScreen.node.remove();
@@ -118,6 +123,7 @@ function dropWatchControls(node, options = {}) {
 }
 
 let pendingOpen = 0;
+let pendingWatchOperation = null;
 const MAX_WATCH_STREAMS = 2;
 let watchChoiceMenu = null;
 
@@ -258,6 +264,10 @@ function callLink() {
  * is looked for on every frame, so the stage mounts before Discord's own call view is painted.
  */
 function openWatchScreen(item) {
+    if (pendingWatchOperation) recordDiagnostic("playback.cancel", { operation: pendingWatchOperation, reason: "replaced" });
+    const operation = diagnosticOperation();
+    pendingWatchOperation = operation;
+    recordDiagnostic("playback.open", { operation, count: watchItemsOf(item).length });
     if (state.simulateViewer && item?.mine)
         item = {
             ...item,
@@ -269,7 +279,7 @@ function openWatchScreen(item) {
     const link = hasCallScreen(chatPage()) ? null : callLink();
 
     if (!link) {
-        mountWatchScreen(item);
+        mountWatchScreen(item, operation);
         return;
     }
 
@@ -280,13 +290,13 @@ function openWatchScreen(item) {
         if (request !== pendingOpen) return;
 
         if (hasCallScreen(chatPage())) {
-            mountWatchScreen(item);
+            mountWatchScreen(item, operation);
             return;
         }
 
         if (Date.now() - start > 4000) {
             log("the call screen did not appear; opening the stage on the current page");
-            mountWatchScreen(item);
+            mountWatchScreen(item, operation);
             return;
         }
 
@@ -299,13 +309,15 @@ function openWatchScreen(item) {
 /**
  * Builds the stage from Discord's captured markup inside the call screen.
  */
-function mountWatchScreen(item) {
+function mountWatchScreen(item, operation = null) {
+    pendingWatchOperation = null;
     pendingOpen++;
     const page = chatPage();
     const watchItems = watchItemsOf(item);
     const primaryItem = watchItems[0] ?? item;
 
     if (!page) {
+        recordDiagnostic("playback.failed", { operation, reason: "unavailable" });
         dropStreamFrame();
         log("chat area not found; stage not mounted");
         return;
@@ -475,7 +487,10 @@ function mountWatchScreen(item) {
     const initialAspect = watchItems.length > 1 ? gridAspectFor(watchItems) : knownAspect(primaryItem);
     if (initialAspect) node.dataset.huginAspect = String(initialAspect);
     const video = watchItems.length > 1 ? mountWatchVideoGrid(node, watchItems) : mountWatchVideo(node, primaryItem);
-    if (!video) dropStreamFrame();
+    if (!video) {
+        recordDiagnostic("playback.failed", { operation, reason: "missing_source" });
+        dropStreamFrame();
+    }
     const volume = watchItems.length > 1 ? null : mountWatchVolume(node, primaryItem);
     fitWatchStage(node);
     const disableFullscreen = bindFullscreen(node);
@@ -510,6 +525,7 @@ function mountWatchScreen(item) {
         focusedStreamId: null,
         parkedAt: 0
     };
+    recordDiagnostic("playback.mounted", { operation, surface: watchItems.length > 1 ? "grid" : "stage", count: watchItems.length });
 
     watchScreen.exitWatcher = setInterval(() => {
         if (!watchScreen) return;
